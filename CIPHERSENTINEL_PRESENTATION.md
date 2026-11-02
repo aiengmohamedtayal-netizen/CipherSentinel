@@ -96,26 +96,28 @@
 
 ---
 
-### Slide 5: Classical Cryptography: Education & Hardening
+### Slide 5: Classical Cryptography: The Eight Algorithms
 
 #### Slide Title
-**Classical Ciphers: Pedagogical Value & Input Validation**
+**Comprehensive Classical Ciphers & Input Validation Hardening**
 
 #### Slide Content
-- **Caesar Cipher (Monoalphabetic Substitution):**
-  - Modular arithmetic: $C_i = (P_i + k) \pmod{26}$.
-  - Demonstrates key space limitations ($|\mathcal{K}| = 25$) and vulnerability to frequency analysis.
-  - **Strict Validation Hardening:** Rejects fractional shifts ($k=3.5$), $\text{NaN}$, and $\pm\infty$ with explicit errors, preventing silent truncation and NUL character corruption.
-- **Vigenère Cipher (Polyalphabetic Substitution):**
-  - Periodic keyword substitution: $C_i = (P_i + K_{i \pmod m}) \pmod{26}$.
-  - Demonstrates resistance to single-letter frequency attacks and the concept of polyalphabetic periods.
-- **Language Scope:** Classical ciphers operate on ASCII A–Z; Arabic script passes through unaltered by design.
+- **The Complete Classical Spectrum (8 Algorithms):**
+  1. *Caesar Cipher:* Fixed modular shift ($C = (P + K) \bmod 26$) with strict integer validation.
+  2. *ROT13:* Fixed shift of 13 positions, self-reciprocal involution requiring no user key.
+  3. *Additive Cipher:* General shift addition, demonstrating equivalence to Caesar in $(\mathbb{Z}_{26}, +)$.
+  4. *Multiplicative Cipher:* Modular multiplication ($C = (P \cdot K) \bmod 26$) with $\gcd(K, 26) = 1$ coprimality checks.
+  5. *Playfair Cipher:* Digraph substitution with live $5 \times 5$ matrix grid (`J` $\to$ `I`) and filler insertion.
+  6. *Hill Cipher:* $2 \times 2$ matrix linear algebra modulo 26 with determinant checks and inverse matrix preview.
+  7. *Vigenère Cipher:* Periodic polyalphabetic keyword substitution resisting single-letter frequency attacks.
+  8. *Autokey Cipher:* Plaintext-Autokey variant extending keystream with recovered plaintext.
+- **Strict Validation Hardening:** Rejects fractional shifts ($K=3.5$), $\text{NaN}$, non-coprime keys, and non-invertible matrices with informative mathematical guidance.
 
 #### Suggested Visual
-- Interactive Caesar shift wheel graphic alongside a before/after code snippet illustrating input validation defense against fractional numbers and $\text{NaN}$.
+- Grid graphic displaying the 8 classical ciphers, highlighting the live $5 \times 5$ Playfair matrix and $2 \times 2$ Hill matrix determinant calculation.
 
 #### Presenter Notes
-> "Before exploring modern standards, CipherSentinel grounds users in classical cryptography. We implemented Caesar and Vigenère ciphers. Beyond teaching modular shifts, this screen served as an exercise in secure input validation. In earlier versions, fractional shifts like 3.5 were silently floored, and non-finite inputs like Infinity produced corrupted NUL bytes. We hardened the implementation with strict integer validation, rejecting any non-integer input before execution."
+> "Before exploring modern standards, CipherSentinel grounds users in the evolution of classical cryptography through eight distinct algorithms. We go beyond simple shifts to include modular multiplication, polygraphic digraph substitution with Playfair's 5x5 matrix, linear algebra with the Hill 2x2 cipher, and both periodic Vigenère and aperiodic Plaintext-Autokey ciphers. Each algorithm enforces strict mathematical validation—such as requiring gcd(K, 26) = 1 for multiplicative keys—with real-time interactive matrix visualizations."
 
 ---
 
@@ -252,20 +254,20 @@
 #### Slide Content
 - **Automated Verification Harness:**
   - In-app Testing Center: Executes tests T-01 through T-22 in active browser memory.
-  - Headless Unit Suite: 38 automated tests across 3 suites (T-01 to T-22, Caesar validation, AI vectorizer).
-  - **Results:** 38/38 tests passing (100%), exit code 0; `tsc --noEmit` exit code 0.
+  - Headless Unit Suite: 62 automated tests across 12 suites (T-01 to T-22, Caesar validation, AI vectorizer, and 8 Classical Ciphers).
+  - **Results:** 62/62 tests passing (100%), exit code 0; `tsc --noEmit` exit code 0.
 - **Production Build Optimization:**
-  - Vite manual chunk splitting eliminates Rollup 500 kB warnings: `vendor-react-motion` (352 kB), `index` (330 kB), `icons` (15 kB).
+  - Vite manual chunk splitting eliminates Rollup 500 kB warnings: `vendor-react-motion` (352 kB), `index` (368 kB), `icons` (16 kB).
 - **Security Disclosures & Honest Limitations:**
   - *Volatile Memory:* Session storage only; closing the tab purges all cryptographic keys.
   - *Key Custody:* Browser memory is not an HSM; sensitive operations are educational demonstrations.
   - *AI Heuristic:* Phishing risk scores are uncalibrated advisories, not formal probability certifications.
 
 #### Suggested Visual
-- Console terminal screenshot displaying `✔ 38 tests pass, 0 fail` alongside a summary table of the T-01 through T-22 test matrix.
+- Console terminal screenshot displaying `✔ 62 tests pass, 0 fail` alongside a summary table of the comprehensive test matrix.
 
 #### Presenter Notes
-> "Software engineering integrity requires transparent testing and honest disclosure of limitations. Our automated test suite runs 38 assertions covering the full T-01 to T-22 matrix, Caesar edge cases, and AI vectorization, all passing with zero failures. We also optimized our production build with manual chunk splitting, eliminating all bundle size warnings. We are explicit about limitations: browser memory is not an HSM, session keys disappear when tabs close, and AI threat scores are advisory heuristics."
+> "Software engineering integrity requires transparent testing and honest disclosure of limitations. Our automated test suite runs 62 assertions across 12 suites covering the full T-01 to T-22 matrix, Caesar edge cases, AI vectorization, and all eight classical cipher algorithms, all passing with zero failures. We also optimized our production build with manual chunk splitting, eliminating all bundle size warnings. We are explicit about limitations: browser memory is not an HSM, session keys disappear when tabs close, and AI threat scores are advisory heuristics."
 
 ---
 
@@ -276,14 +278,14 @@
 
 #### Slide Content
 - **Summary of Achievements:**
-  - Unified classical, symmetric, asymmetric, and hashing cryptography in an interactive workbench.
+  - Unified eight classical ciphers, authenticated symmetric, asymmetric, and hashing cryptography in one interactive workbench.
   - Delivered client-side authenticated hybrid encryption with strict fail-closed tampering rejection.
   - Executed privacy-preserving, zero-telemetry in-browser AI threat intelligence.
   - Implemented a peer-level, native Arabic RTL edition powered by local Thmanyah typography.
-  - Achieved 100% test pass rate (38/38) and zero-warning production build.
+  - Achieved 100% test pass rate (62/62) and zero-warning production build.
 - **Demonstration Sequence (5–7 Minutes):**
   1. *Dashboard & Arabic RTL Switch:* Demonstrate layout and typography transition.
-  2. *Crypto Lab:* Caesar validation & AES-GCM round-trip.
+  2. *Crypto Lab:* Classical ciphers (Playfair live matrix, Hill 2×2 inverse preview) & AES-GCM round-trip.
   3. *Hybrid Encryption:* Create envelope and store in session vault.
   4. *Secure Vault & Tampering:* Verify fail-closed rejection on 1-bit ciphertext modification.
   5. *AI Phishing Detection:* Real-time local inference and feature explainability.

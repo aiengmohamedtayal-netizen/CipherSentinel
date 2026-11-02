@@ -57,18 +57,27 @@ Before starting the presentation, verify that:
 
 ---
 
-#### Step 2: Classical Hardening & Authenticated AES-256-GCM (0:45 – 1:45)
+#### Step 2: Classical Ciphers Suite & Authenticated AES-256-GCM (0:45 – 1:45)
 
 ##### Action & Navigation
 1. Click **Crypto Lab** in the top navigation bar.
-2. Select **Caesar Cipher** tab.
-3. Test a valid integer: Enter `ATTACK AT DAWN` with shift `7` $\rightarrow$ Encrypt $\rightarrow$ Result: `Haahjr ha Khdu`.
-4. Enter an invalid shift: Type `3.5` or `invalid` into the shift input box.
-5. Click **Encrypt**. Observe the red validation error banner: *"Caesar shift must be a valid integer."*
-6. Switch tab to **AES-256-GCM**.
-7. In the Message field, enter:  
+2. Note the category filter buttons: **All Algorithms (11)**, **Classical (8)**, and **Modern (3)**.
+3. Select **Playfair Cipher**:
+   - In **Playfair Keyword**, enter `MONARCHY`.
+   - Observe the live **5×5 Key Matrix** rendered instantly in the UI with `J` mapped to `I`.
+   - Enter plaintext: `INSTRUMENTS` $\rightarrow$ Click **Encrypt**.
+   - Observe prepared digraphs `['IN', 'ST', 'RU', 'ME', 'NT', 'SX']` and ciphertext `GA TL MZ CL RQ XA`.
+4. Select **Hill Cipher**:
+   - Point out the $2 \times 2$ matrix controls ($a=3, b=3, c=2, d=5$).
+   - Note the live determinant display ($\det = 9$) and modular inverse matrix $\begin{pmatrix} 15 & 17 \\ 20 & 9 \end{pmatrix}$.
+   - Click **Encrypt with Hill Cipher** to encrypt `HELP` into `HIAT`.
+5. Select **Caesar Cipher** to demonstrate strict validation:
+   - Enter an invalid shift like `3.5` or `invalid`.
+   - Click **Encrypt**. Observe the red validation error banner: *"Caesar shift must be a valid integer."*
+6. Switch to **AES-256-GCM**:
+   - In the Message field, enter:  
    `CONFIDENTIAL FLIGHT DISPATCH #402`
-8. Click **Encrypt with AES-GCM**.
+   - Click **Encrypt with AES-GCM**.
 
 ##### Exact UI Behavior
 - A fresh 96-bit nonce and 128-bit authentication tag are generated instantly.
@@ -76,7 +85,7 @@ Before starting the presentation, verify that:
 - Click **Decrypt**: Plaintext `CONFIDENTIAL FLIGHT DISPATCH #402` reappears with green checkmark: *"Authenticated decryption verified."*
 
 ##### What to Explain
-> *"In the Crypto Lab, we examine both classical and modern cryptography. For Caesar, we implemented strict input validation: non-integer shifts like 3.5 or NaN are rejected before execution, preventing silent truncation and corrupted NUL characters. Moving to modern symmetric encryption, AES-256-GCM provides authenticated encryption. Notice that every encryption generates a fresh, random 96-bit nonce. The 128-bit authentication tag guarantees that any modification to the ciphertext or Additional Authenticated Data will cause decryption to fail closed."*
+> *"In the Crypto Lab, we examine the full spectrum of eight classical ciphers alongside modern standards. We feature interactive visual tools: for Playfair, the 5x5 matrix is rendered live and prepared digraphs are isolated. For Hill, 2x2 matrix determinants and modular inverses are calculated in real time. We strictly enforce mathematical constraints such as coprimality and integer boundaries. Moving to modern symmetric encryption, AES-256-GCM demonstrates authenticated encryption with fresh 96-bit nonces and 128-bit tags that prevent undetectable tampering."*
 
 ---
 

@@ -7,7 +7,7 @@ The application is an academic demonstration workbench for computer security and
 ## Features
 
 - **Dashboard** — links to the seven core workspaces and displays current-session activity metrics and vault counters.
-- **Crypto Lab** — educational Caesar and Vigenère demonstrations, authenticated AES-256-GCM encryption/decryption, RSA-OAEP key wrapping, and SHA-256 operations. Caesar cipher input enforces strict integer shift validation, rejecting fractional numbers, NaN, ±Infinity, and invalid numeric strings to eliminate silent flooring and prevent NUL character corruption.
+- **Crypto Lab** — comprehensive laboratory supporting eight classical ciphers (Caesar, ROT13, Additive, Multiplicative, Playfair 5×5 matrix, Hill 2×2 linear matrix, Vigenère, and Plaintext-Autokey) alongside authenticated AES-256-GCM encryption/decryption, RSA-OAEP key wrapping, and SHA-256 operations. Caesar and Additive ciphers enforce strict integer key validation; Multiplicative verifies coprimality ($\gcd(K, 26) = 1$); Playfair renders interactive 5×5 key grids and prepared digraphs; Hill computes modular determinants and matrix inverses; and Autokey dynamically recovers plaintext keystreams.
 - **AI Phishing Detection** — runs custom TypeScript TF-IDF-style feature extraction and Logistic Regression inference directly in the browser (no Python or Scikit-learn runtime) and displays an advisory score, risk classification band, and contributing token indicators.
 - **Hash & Integrity** — computes SHA-256 digests via Web Crypto API, compares expected digests, and demonstrates bit-level avalanche effect differences.
 - **Hybrid Encryption** — encrypts a message payload with a fresh 256-bit AES data-encryption key (DEK), uses a fresh 96-bit GCM nonce, binds record and key identifiers as Additional Authenticated Data (AAD), and wraps the AES key for the active RSA-3072 OAEP/SHA-256 public key. The matching private key unwraps the DEK; AES-GCM verifies the 128-bit authentication tag before plaintext is returned.
@@ -72,7 +72,7 @@ Open `http://127.0.0.1:3000`.
 
 ```bash
 npm run lint   # TypeScript compilation check (tsc --noEmit)
-npm test       # Node test runner; executes 38 tests across 3 suites (T-01 to T-22 matrix, Caesar validation, AI vectorizer)
+npm test       # Node test runner; executes 62 tests across 12 suites (T-01 to T-22 matrix, Caesar validation, AI vectorizer, and 8 Classical Ciphers)
 npm run build  # Production static bundle generated in dist/
 ```
 
@@ -90,6 +90,7 @@ npm run preview
 
 ## Project Documentation
 
+- `CLASSICAL_CIPHERS_IMPLEMENTATION_REPORT.md` — architectural design, mathematical formulations, and verification of all eight classical cipher algorithms.
 - `CIPHERSENTINEL_FINAL_REPORT.md` — comprehensive academic technical report (architecture, cryptography, AI pipeline, localization, testing).
 - `CIPHERSENTINEL_PRESENTATION.md` — 12-slide project defense presentation with visual recommendations and presenter notes.
 - `CIPHERSENTINEL_DEMO_SCRIPT.md` — step-by-step 5–7 minute live demonstration guide with inputs, expected outputs, and recovery procedures.

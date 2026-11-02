@@ -1,5 +1,5 @@
 import { useLanguage } from '../../context/LanguageContext';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Lock,
@@ -18,14 +18,36 @@ import {
   Info,
   Layers,
   ArrowRight,
+  Grid3X3,
+  Table,
 } from 'lucide-react';
 import { useSessionActivity } from '../../context/SessionContext';
 import {
   validateCaesarShift,
   caesarEncrypt,
   caesarDecrypt,
+  rot13Encrypt,
+  rot13Decrypt,
+  validateAdditiveKey,
+  additiveEncrypt,
+  additiveDecrypt,
+  VALID_MULTIPLICATIVE_KEYS,
+  validateMultiplicativeKey,
+  multiplicativeEncrypt,
+  multiplicativeDecrypt,
+  generatePlayfairMatrix,
+  playfairEncrypt,
+  playfairDecrypt,
+  PlayfairResult,
+  validateHillMatrix,
+  hillEncrypt,
+  hillDecrypt,
+  HillResult,
+  HillMatrix2x2,
   vigenereEncrypt,
   vigenereDecrypt,
+  autokeyEncrypt,
+  autokeyDecrypt,
   sha256,
   verifySha256,
   aesGcmEncrypt,
@@ -55,8 +77,58 @@ const ALGORITHMS: AlgoOption[] = [
     category: 'Classical Encryption',
     standard: 'Classical Monoalphabetic',
     description: 'Monoalphabetic modular substitution shifting alphabetic characters modulo 26.',
-    formula: 'E(x) = (x + k) mod 26, D(x) = (x - k) mod 26',
+    formula: 'C = (P + K) mod 26, P = (C - K) mod 26',
     icon: BookOpen,
+    isEducational: true,
+  },
+  {
+    id: 'rot13',
+    name: 'ROT13',
+    category: 'Classical Encryption',
+    standard: 'Fixed Shift Involution',
+    description: 'Specialized Caesar Cipher with a fixed shift of 13 positions. Self-reciprocal: encryption and decryption use the identical transformation.',
+    formula: 'C = (P + 13) mod 26, P = (C + 13) mod 26',
+    icon: RefreshCw,
+    isEducational: true,
+  },
+  {
+    id: 'additive',
+    name: 'Additive Cipher',
+    category: 'Classical Encryption',
+    standard: 'Modular Shift Addition',
+    description: 'Generalized modular shift addition: C = (P + K) mod 26. Mathematically equivalent to the general Caesar cipher with arbitrary integer key.',
+    formula: 'C = (P + K) mod 26, P = (C - K) mod 26',
+    icon: SlidersHorizontal,
+    isEducational: true,
+  },
+  {
+    id: 'multiplicative',
+    name: 'Multiplicative Cipher',
+    category: 'Classical Encryption',
+    standard: 'Modular Multiplication',
+    description: 'Monoalphabetic substitution multiplying letter values by a key coprime to 26. Decryption multiplies by modular multiplicative inverse K⁻¹ mod 26.',
+    formula: 'C = (P × K) mod 26, P = (C × K⁻¹) mod 26 [gcd(K, 26) = 1]',
+    icon: Layers,
+    isEducational: true,
+  },
+  {
+    id: 'playfair',
+    name: 'Playfair Cipher',
+    category: 'Classical Encryption',
+    standard: 'Digraph 5×5 Matrix',
+    description: 'Polygraphic substitution cipher encrypting digraph letter pairs using a 5×5 key matrix with J merged into I. Handles repeated letters with filler characters.',
+    formula: 'Digraph rules: Same Row (+1), Same Column (+1), Rectangle (swap cols)',
+    icon: Grid3X3,
+    isEducational: true,
+  },
+  {
+    id: 'hill',
+    name: 'Hill Cipher',
+    category: 'Classical Encryption',
+    standard: '2×2 Matrix Modulo 26',
+    description: 'Polygraphic block cipher encrypting letter pairs via linear algebra: C = (K × P) mod 26. Invertible only when det(K) is coprime to 26.',
+    formula: 'C = (K × P) mod 26, P = (K⁻¹ × C) mod 26, det(K)⁻¹ mod 26',
+    icon: Table,
     isEducational: true,
   },
   {
@@ -64,9 +136,19 @@ const ALGORITHMS: AlgoOption[] = [
     name: 'Vigenère Cipher',
     category: 'Classical Encryption',
     standard: 'Classical Polyalphabetic',
-    description: 'Polyalphabetic substitution using a periodic keyword string modulo 26.',
+    description: 'Polyalphabetic substitution using a periodic keyword string modulo 26 to shift each letter successively.',
     formula: 'C_i = (P_i + K_i) mod 26, P_i = (C_i - K_i) mod 26',
     icon: SlidersHorizontal,
+    isEducational: true,
+  },
+  {
+    id: 'autokey',
+    name: 'Autokey Cipher',
+    category: 'Classical Encryption',
+    standard: 'Plaintext-Autokey Keystream',
+    description: 'Polyalphabetic cipher eliminating periodic vulnerability by extending keystream with the recovered plaintext (Plaintext-Autokey variant).',
+    formula: 'K_stream = KEYWORD || P, C_i = (P_i + K_stream_i) mod 26',
+    icon: Zap,
     isEducational: true,
   },
   {
@@ -128,6 +210,18 @@ export const CryptoLabPage: React.FC = () => {
   // Dynamic Keys State
   const [caesarShift, setCaesarShift] = useState<number | string>(7);
   const [vigenereKey, setVigenereKey] = useState<string>('SENTINEL');
+  const [additiveKey, setAdditiveKey] = useState<number | string>(7);
+  const [multiplicativeKey, setMultiplicativeKey] = useState<number | string>(5);
+  const [playfairKey, setPlayfairKey] = useState<string>('MONARCHY');
+  const [hillMatrix, setHillMatrix] = useState<HillMatrix2x2>([
+    [3, 3],
+    [2, 5],
+  ]);
+  const [autokeyKey, setAutokeyKey] = useState<string>('QUEENLY');
+  const [playfairMetadata, setPlayfairMetadata] = useState<PlayfairResult | null>(null);
+  const [hillMetadata, setHillMetadata] = useState<HillResult | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'classical' | 'modern'>('all');
+
   const [aesKeyInput, setAesKeyInput] = useState<string>('');
   const [gcmNonceInput, setGcmNonceInput] = useState<string>('');
   const [authTagInput, setAuthTagInput] = useState<string>('');
@@ -141,7 +235,42 @@ export const CryptoLabPage: React.FC = () => {
   const [copied, setCopied] = useState<boolean>(false);
   const [lastOpDurationMs, setLastOpDurationMs] = useState<number | null>(null);
 
-  const currentAlgo = ALGORITHMS.find((a) => a.id === selectedAlgoId) || ALGORITHMS[2];
+  const currentAlgo = ALGORITHMS.find((a) => a.id === selectedAlgoId) || ALGORITHMS[0];
+
+  const filteredAlgorithms = useMemo(() => {
+    return ALGORITHMS.filter((algo) => {
+      if (categoryFilter === 'classical') return algo.isEducational;
+      if (categoryFilter === 'modern') return !algo.isEducational;
+      return true;
+    });
+  }, [categoryFilter]);
+
+  // Playfair live matrix
+  const livePlayfairMatrix = useMemo(() => {
+    try {
+      return generatePlayfairMatrix(playfairKey || 'MONARCHY').matrix;
+    } catch {
+      return null;
+    }
+  }, [playfairKey]);
+
+  // Hill live evaluation
+  const liveHillInfo = useMemo(() => {
+    try {
+      return validateHillMatrix(hillMatrix);
+    } catch (err: any) {
+      return { error: err.message || 'Invalid matrix' };
+    }
+  }, [hillMatrix]);
+
+  // Multiplicative live evaluation
+  const liveMultiplicativeInfo = useMemo(() => {
+    try {
+      return validateMultiplicativeKey(multiplicativeKey);
+    } catch (err: any) {
+      return { error: err.message || 'Invalid key' };
+    }
+  }, [multiplicativeKey]);
 
   // Sync session AES key when loaded
   useEffect(() => {
@@ -200,6 +329,67 @@ export const CryptoLabPage: React.FC = () => {
           setOutputText(res);
           setStatusMessage(`Caesar decrypted successfully with shift k=-${validatedShift}.`);
         }
+      } else if (currentAlgo.id === 'rot13') {
+        if (operationMode === 'encrypt') {
+          const res = rot13Encrypt(inputText);
+          setOutputText(res);
+          setStatusMessage('ROT13 transformed (fixed shift 13 involution).');
+        } else {
+          const target = outputText || inputText;
+          const res = rot13Decrypt(target);
+          setOutputText(res);
+          setStatusMessage('ROT13 transformed (fixed shift 13 involution).');
+        }
+      } else if (currentAlgo.id === 'additive') {
+        const validatedK = validateAdditiveKey(additiveKey);
+        if (operationMode === 'encrypt') {
+          const res = additiveEncrypt(inputText, validatedK);
+          setOutputText(res);
+          setStatusMessage(`Additive cipher encrypted with key k=${validatedK}.`);
+        } else {
+          const target = outputText || inputText;
+          const res = additiveDecrypt(target, validatedK);
+          setOutputText(res);
+          setStatusMessage(`Additive cipher decrypted with key k=-${validatedK}.`);
+        }
+      } else if (currentAlgo.id === 'multiplicative') {
+        const { normalizedKey, inverseKey } = validateMultiplicativeKey(multiplicativeKey);
+        if (operationMode === 'encrypt') {
+          const res = multiplicativeEncrypt(inputText, normalizedKey);
+          setOutputText(res);
+          setStatusMessage(`Multiplicative encrypted with key k=${normalizedKey} (inverse k⁻¹=${inverseKey}).`);
+        } else {
+          const target = outputText || inputText;
+          const res = multiplicativeDecrypt(target, normalizedKey);
+          setOutputText(res);
+          setStatusMessage(`Multiplicative decrypted with inverse key k⁻¹=${inverseKey}.`);
+        }
+      } else if (currentAlgo.id === 'playfair') {
+        if (operationMode === 'encrypt') {
+          const res = playfairEncrypt(inputText, playfairKey);
+          setOutputText(res.ciphertext);
+          setPlayfairMetadata(res);
+          setStatusMessage('Playfair encrypted into digraph pairs with 5×5 key matrix.');
+        } else {
+          const target = outputText || inputText;
+          const res = playfairDecrypt(target, playfairKey);
+          setOutputText(res.ciphertext);
+          setPlayfairMetadata(res);
+          setStatusMessage('Playfair decrypted from digraph pairs with 5×5 key matrix.');
+        }
+      } else if (currentAlgo.id === 'hill') {
+        if (operationMode === 'encrypt') {
+          const res = hillEncrypt(inputText, hillMatrix);
+          setOutputText(res.ciphertext);
+          setHillMetadata(res);
+          setStatusMessage(`Hill cipher encrypted 2×2 blocks (det=${res.determinant}, det⁻¹=${res.determinantInverse}).`);
+        } else {
+          const target = outputText || inputText;
+          const res = hillDecrypt(target, hillMatrix);
+          setOutputText(res.ciphertext);
+          setHillMetadata(res);
+          setStatusMessage('Hill cipher decrypted 2×2 blocks with modular inverse matrix.');
+        }
       } else if (currentAlgo.id === 'vigenere') {
         if (!vigenereKey.trim() || !/^[A-Za-z]+$/.test(vigenereKey.trim())) {
           throw new Error('Vigenère keyword must contain alphabetic characters only (A-Z).');
@@ -213,6 +403,17 @@ export const CryptoLabPage: React.FC = () => {
           const res = vigenereDecrypt(target, vigenereKey);
           setOutputText(res);
           setStatusMessage(`Vigenère decrypted with keyword "${vigenereKey.toUpperCase()}".`);
+        }
+      } else if (currentAlgo.id === 'autokey') {
+        if (operationMode === 'encrypt') {
+          const res = autokeyEncrypt(inputText, autokeyKey);
+          setOutputText(res);
+          setStatusMessage(`Autokey encrypted with keyword "${autokeyKey.toUpperCase()}" using Plaintext Autokey extension.`);
+        } else {
+          const target = outputText || inputText;
+          const res = autokeyDecrypt(target, autokeyKey);
+          setOutputText(res);
+          setStatusMessage(`Autokey decrypted with keyword "${autokeyKey.toUpperCase()}" via recovered plaintext.`);
         }
       } else if (currentAlgo.id === 'aes-256-gcm') {
         const key = aesKeyInput.trim() || activeAesKeyB64;
@@ -353,10 +554,48 @@ export const CryptoLabPage: React.FC = () => {
 
       {/* Algorithm Selector Grid */}
       <div className="space-y-3">
-        <label className="block text-xs font-semibold uppercase tracking-wider text-[#657351] dark:text-[#A3B59E]">
-          {t("1. Select Cryptographic Algorithm")}</label>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {ALGORITHMS.map((algo) => {
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-[#657351] dark:text-[#A3B59E]">
+            {t("1. Select Cryptographic Algorithm")}
+          </label>
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#F5F2EB] dark:bg-[#1A2619] border border-[#243324]/10 dark:border-white/10 w-fit">
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('all')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
+                categoryFilter === 'all'
+                  ? 'bg-[#1F2B1D] dark:bg-[#384E36] text-white shadow-xs'
+                  : 'text-[#4A5D44] dark:text-[#CBD7C7] hover:bg-black/5 dark:hover:bg-white/5'
+              }`}
+            >
+              {t("All Algorithms")} ({ALGORITHMS.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('classical')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
+                categoryFilter === 'classical'
+                  ? 'bg-[#1F2B1D] dark:bg-[#384E36] text-white shadow-xs'
+                  : 'text-[#4A5D44] dark:text-[#CBD7C7] hover:bg-black/5 dark:hover:bg-white/5'
+              }`}
+            >
+              {t("Classical (8)")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('modern')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
+                categoryFilter === 'modern'
+                  ? 'bg-[#1F2B1D] dark:bg-[#384E36] text-white shadow-xs'
+                  : 'text-[#4A5D44] dark:text-[#CBD7C7] hover:bg-black/5 dark:hover:bg-white/5'
+              }`}
+            >
+              {t("Modern (3)")}
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+          {filteredAlgorithms.map((algo) => {
             const Icon = algo.icon;
             const isSelected = algo.id === selectedAlgoId;
             return (
@@ -614,6 +853,251 @@ export const CryptoLabPage: React.FC = () => {
               </div>
             )}
 
+            {/* ROT13 Controls */}
+            {currentAlgo.id === 'rot13' && (
+              <div className="p-4 rounded-2xl bg-[#F5F2EB] dark:bg-[#233522] border border-[#243324]/10 dark:border-white/10 text-xs text-[#4A5D44] dark:text-[#CBD7C7] space-y-2">
+                <div className="font-semibold text-[#1F2B1D] dark:text-[#F4EFE6] flex items-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>{t("Fixed Shift Involution Notice:")}</span>
+                </div>
+                <p className="leading-relaxed">
+                  {t("ROT13 is a fixed-shift (k=13) Caesar cipher. No key input is required. Encryption and decryption are identical involutions.")}
+                </p>
+                <div className="font-mono text-[11px] bg-white/60 dark:bg-black/20 p-2 rounded-lg" dir="ltr">
+                  C = (P + 13) mod 26 &nbsp;|&nbsp; P = (C + 13) mod 26
+                </div>
+              </div>
+            )}
+
+            {/* Additive Controls */}
+            {currentAlgo.id === 'additive' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-[#4A5D44] dark:text-[#CBD7C7]">
+                    {t("Numeric Key (K):")}{typeof additiveKey === 'number' && Number.isFinite(additiveKey) ? (
+                      <span className="font-mono font-bold text-[#1F2B1D] dark:text-[#F4EFE6] ml-1.5 rtl:mr-1.5" dir="ltr">
+                        <bdi>{formatNumber(additiveKey)}</bdi>
+                      </span>
+                    ) : (
+                      <span className="font-mono font-bold text-[#1F2B1D] dark:text-[#F4EFE6] ml-1.5 rtl:mr-1.5" dir="ltr">
+                        <bdi>{String(additiveKey)}</bdi>
+                      </span>
+                    )}
+                  </label>
+                  <span className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E]">{t("0 to 25")}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={0}
+                    max={25}
+                    value={
+                      typeof additiveKey === 'number' && Number.isInteger(additiveKey) && additiveKey >= 0 && additiveKey <= 25
+                        ? additiveKey
+                        : typeof additiveKey === 'string' && /^-?\d+$/.test(additiveKey.trim()) && Number(additiveKey.trim()) >= 0 && Number(additiveKey.trim()) <= 25
+                          ? Number(additiveKey.trim())
+                          : 7
+                    }
+                    onChange={(e) => setAdditiveKey(Number(e.target.value))}
+                    className="flex-1 accent-[#1F2B1D] dark:accent-[#A3B59E] cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={additiveKey}
+                    onChange={(e) => setAdditiveKey(e.target.value)}
+                    placeholder="7"
+                    aria-label={t("Numeric Key (K):")}
+                    className="w-20 px-3 py-1.5 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs sm:text-sm font-mono text-center focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6]"
+                  />
+                </div>
+                <p className="text-[11px] text-[#657351] dark:text-[#A3B59E]">
+                  {t("Mathematically equivalent to Caesar Cipher (shift addition modulo 26).")}
+                </p>
+              </div>
+            )}
+
+            {/* Multiplicative Controls */}
+            {currentAlgo.id === 'multiplicative' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-[#4A5D44] dark:text-[#CBD7C7]">
+                    {t("Coprime Key (K):")}
+                  </label>
+                  {'inverseKey' in liveMultiplicativeInfo && (
+                    <span className="text-[11px] font-mono text-emerald-700 dark:text-emerald-400" dir="ltr">
+                      {t("Modular Inverse (K⁻¹ mod 26):")} <strong>{liveMultiplicativeInfo.inverseKey}</strong>
+                    </span>
+                  )}
+                  {'error' in liveMultiplicativeInfo && (
+                    <span className="text-[11px] font-mono text-rose-600 dark:text-rose-400">
+                      {t("Invalid Key: gcd(K, 26) must be 1.")}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    value={multiplicativeKey}
+                    onChange={(e) => setMultiplicativeKey(e.target.value)}
+                    placeholder="5"
+                    aria-label={t("Coprime Key (K):")}
+                    className="w-full px-3.5 py-2 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6]"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E]">
+                    {t("Coprime Keys with 26:")}
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {VALID_MULTIPLICATIVE_KEYS.map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setMultiplicativeKey(k)}
+                        className={`px-2 py-0.5 rounded-md text-[11px] font-mono cursor-pointer transition-colors ${
+                          Number(multiplicativeKey) === k
+                            ? 'bg-[#1F2B1D] text-white dark:bg-[#CBD7C7] dark:text-[#1F2B1D] font-bold'
+                            : 'bg-[#F5F2EB] dark:bg-[#233522] text-[#1F2B1D] dark:text-[#CBD7C7] hover:bg-[#eae5da]'
+                        }`}
+                      >
+                        {k}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Playfair Controls */}
+            {currentAlgo.id === 'playfair' && (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-[#4A5D44] dark:text-[#CBD7C7]">
+                    {t("Playfair Keyword:")}
+                  </label>
+                  <input
+                    type="text"
+                    value={playfairKey}
+                    onChange={(e) => setPlayfairKey(e.target.value.toUpperCase())}
+                    placeholder="MONARCHY"
+                    aria-label={t("Playfair Keyword:")}
+                    className="w-full px-3.5 py-2 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6]"
+                  />
+                </div>
+                <p className="text-[11px] text-[#657351] dark:text-[#A3B59E] leading-relaxed">
+                  {t("Letter J is merged into I. Duplicate letters are omitted.")}
+                  {' '}{t("Filler rule: Repeated letters in a pair use X (or Q). Odd length padded with X.")}
+                </p>
+                {/* 5x5 Key Matrix Visual Display */}
+                {livePlayfairMatrix && (
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[#657351] dark:text-[#A3B59E]">
+                      {t("Playfair 5×5 Key Matrix:")}
+                    </span>
+                    <div className="grid grid-cols-5 gap-1.5 max-w-[220px] p-2.5 rounded-xl bg-[#F5F2EB] dark:bg-[#233522] border border-[#243324]/10 dark:border-white/10" dir="ltr">
+                      {livePlayfairMatrix.flat().map((char, idx) => (
+                        <div
+                          key={idx}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg bg-white dark:bg-[#1A2619] border border-[#243324]/15 dark:border-white/15 font-mono text-xs font-bold text-[#1F2B1D] dark:text-[#F4EFE6]"
+                        >
+                          {char}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Hill Controls */}
+            {currentAlgo.id === 'hill' && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-[#4A5D44] dark:text-[#CBD7C7]">
+                      {t("Hill 2×2 Key Matrix (K):")}
+                    </label>
+                    <span className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E]">
+                      mod 26
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 max-w-[200px]" dir="ltr">
+                    <input
+                      type="number"
+                      value={hillMatrix[0][0]}
+                      onChange={(e) => setHillMatrix([[Number(e.target.value) || 0, hillMatrix[0][1]], hillMatrix[1]])}
+                      className="p-2 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-center font-mono text-sm text-[#1F2B1D] dark:text-[#F4EFE6]"
+                      aria-label="K[0][0]"
+                    />
+                    <input
+                      type="number"
+                      value={hillMatrix[0][1]}
+                      onChange={(e) => setHillMatrix([[hillMatrix[0][0], Number(e.target.value) || 0], hillMatrix[1]])}
+                      className="p-2 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-center font-mono text-sm text-[#1F2B1D] dark:text-[#F4EFE6]"
+                      aria-label="K[0][1]"
+                    />
+                    <input
+                      type="number"
+                      value={hillMatrix[1][0]}
+                      onChange={(e) => setHillMatrix([hillMatrix[0], [Number(e.target.value) || 0, hillMatrix[1][1]]])}
+                      className="p-2 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-center font-mono text-sm text-[#1F2B1D] dark:text-[#F4EFE6]"
+                      aria-label="K[1][0]"
+                    />
+                    <input
+                      type="number"
+                      value={hillMatrix[1][1]}
+                      onChange={(e) => setHillMatrix([hillMatrix[0], [hillMatrix[1][0], Number(e.target.value) || 0]])}
+                      className="p-2 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-center font-mono text-sm text-[#1F2B1D] dark:text-[#F4EFE6]"
+                      aria-label="K[1][1]"
+                    />
+                  </div>
+                </div>
+
+                {/* Matrix Status & Invertibility */}
+                {'determinant' in liveHillInfo ? (
+                  <div className="p-3 rounded-xl bg-[#F5F2EB] dark:bg-[#233522] border border-[#243324]/10 dark:border-white/10 text-xs space-y-1">
+                    <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400 font-mono">
+                      <span>{t("Determinant: det(K) = {{det}}", { det: liveHillInfo.determinant })}</span>
+                      <span>det⁻¹ = {liveHillInfo.determinantInverse}</span>
+                    </div>
+                    <div className="text-[11px] text-[#4A5D44] dark:text-[#CBD7C7]">
+                      {t("Modular Inverse Matrix (K⁻¹ mod 26):")}
+                      <span className="font-mono ml-1 font-bold" dir="ltr">
+                        [[{liveHillInfo.inverseMatrix[0][0]}, {liveHillInfo.inverseMatrix[0][1]}], [{liveHillInfo.inverseMatrix[1][0]}, {liveHillInfo.inverseMatrix[1][1]}]]
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 text-xs font-mono">
+                    {t("Matrix is non-invertible: gcd({{det}}, 26) ≠ 1", { det: 'det' })}
+                  </div>
+                )}
+
+                {/* Hill Presets */}
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E]">
+                    {t("Preset Matrices:")}
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { label: 'det=9', matrix: [[3, 3], [2, 5]] as HillMatrix2x2 },
+                      { label: 'det=1', matrix: [[5, 8], [17, 3]] as HillMatrix2x2 },
+                      { label: 'det=11', matrix: [[9, 4], [5, 7]] as HillMatrix2x2 },
+                    ].map((p, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setHillMatrix(p.matrix)}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-mono bg-[#F5F2EB] dark:bg-[#233522] text-[#1F2B1D] dark:text-[#CBD7C7] hover:bg-[#eae5da] cursor-pointer"
+                      >
+                        {p.label}: [[{p.matrix[0].join(',')}] [{p.matrix[1].join(',')}]]
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Vigenère Controls */}
             {currentAlgo.id === 'vigenere' && (
               <div className="space-y-2">
@@ -626,6 +1110,31 @@ export const CryptoLabPage: React.FC = () => {
                   placeholder={t("e.g. SENTINEL")}
                   className="w-full px-4 py-2 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6]"
                 />
+              </div>
+            )}
+
+            {/* Autokey Controls */}
+            {currentAlgo.id === 'autokey' && (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-[#4A5D44] dark:text-[#CBD7C7]">
+                    {t("Autokey Keyword:")}
+                  </label>
+                  <input
+                    type="text"
+                    value={autokeyKey}
+                    onChange={(e) => setAutokeyKey(e.target.value.toUpperCase())}
+                    placeholder="QUEENLY"
+                    aria-label={t("Autokey Keyword:")}
+                    className="w-full px-3.5 py-2 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6]"
+                  />
+                </div>
+                <div className="p-3 rounded-xl bg-[#F5F2EB] dark:bg-[#233522] border border-[#243324]/10 dark:border-white/10 text-xs text-[#4A5D44] dark:text-[#CBD7C7]">
+                  <strong>{t("Variant: Plaintext-Autokey (keystream extended with plaintext characters)")}</strong>
+                  <div className="font-mono text-[11px] mt-1 text-[#1F2B1D] dark:text-[#F4EFE6]" dir="ltr">
+                    K_stream = KEYWORD || P
+                  </div>
+                </div>
               </div>
             )}
 
@@ -801,9 +1310,48 @@ export const CryptoLabPage: React.FC = () => {
             <div className="relative min-h-[160px] p-4 rounded-2xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 flex flex-col justify-between">
               {outputText ? (
                 <div className="space-y-2">
-                  <div dir={selectedAlgoId === 'caesar' || selectedAlgoId === 'vigenere' || (selectedAlgoId === 'aes-256-gcm' && operationMode === 'decrypt') ? 'auto' : 'ltr'} className="text-xs font-mono text-[#1F2B1D] dark:text-[#F4EFE6] break-all leading-relaxed select-all">
+                  <div
+                    dir={
+                      ['caesar', 'rot13', 'additive', 'multiplicative', 'playfair', 'hill', 'vigenere', 'autokey'].includes(selectedAlgoId) ||
+                      (selectedAlgoId === 'aes-256-gcm' && operationMode === 'decrypt')
+                        ? 'auto'
+                        : 'ltr'
+                    }
+                    className="text-xs font-mono text-[#1F2B1D] dark:text-[#F4EFE6] break-all leading-relaxed select-all"
+                  >
                     <bdi>{outputText}</bdi>
                   </div>
+
+                  {/* Playfair Digraphs Display */}
+                  {selectedAlgoId === 'playfair' && playfairMetadata && (
+                    <div className="mt-3 p-3 rounded-xl bg-white dark:bg-[#1E2E1D] border border-[#243324]/10 dark:border-white/10 text-xs font-mono space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-[#657351] dark:text-[#A3B59E]">
+                        {t("Prepared Digraph Pairs:")}
+                      </span>
+                      <div className="flex flex-wrap gap-1.5 text-xs font-bold" dir="ltr">
+                        {playfairMetadata.preparedDigraphs.map(([a, b], idx) => (
+                          <span key={idx} className="px-1.5 py-0.5 rounded bg-[#F5F2EB] dark:bg-[#2a3e28] text-[#1F2B1D] dark:text-[#F4EFE6]">
+                            {a}{b}
+                          </span>
+                        ))}
+                      </div>
+                      {operationMode === 'decrypt' && (
+                        <p className="text-[10px] text-[#657351] dark:text-[#A3B59E] mt-1">
+                          {t("Raw Decrypted Output (retains padding & fillers)")}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Hill Metadata Display */}
+                  {selectedAlgoId === 'hill' && hillMetadata && (
+                    <div className="mt-3 p-3 rounded-xl bg-white dark:bg-[#1E2E1D] border border-[#243324]/10 dark:border-white/10 text-xs font-mono space-y-1">
+                      <div className="flex justify-between text-[11px]" dir="ltr">
+                        <span>det(K) = {hillMetadata.determinant}</span>
+                        <span>det⁻¹ = {hillMetadata.determinantInverse}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-10 text-center text-[#657351] dark:text-[#A3B59E] space-y-2">

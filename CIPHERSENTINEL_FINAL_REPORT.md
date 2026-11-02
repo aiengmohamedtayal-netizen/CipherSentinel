@@ -27,11 +27,11 @@
 
 In modern distributed computing, secure message interchange requires a layered application of distinct cryptographic disciplines: confidential payload encryption, tamper-proof authenticated data transport, public-key key exchange, message integrity auditing, and heuristic evaluation of untrusted communications. **CipherSentinel** is a client-side, zero-telemetry cybersecurity workbench developed in React 19, TypeScript 5.8, and Vite 6. 
 
-The system implements educational classical ciphers (Caesar Cipher with strict integer validation and polyalphabetic Vigenère Cipher), modern symmetric encryption (AES-256 in Galois/Counter Mode with 96-bit random nonces and 128-bit authentication tags), asymmetric public-key cryptography (RSA-OAEP with 3072-bit keys and SHA-256 digest padding), an end-to-end hybrid envelope workflow, one-way cryptographic hashing (SHA-256 with bit-level avalanche effect demonstrations), and password-based key derivation (PBKDF2-HMAC-SHA-256 at 100,000 iterations). 
+The system implements an expanded collection of eight educational classical ciphers (Caesar Cipher with strict integer validation, ROT13 involution, Additive Cipher, Multiplicative Cipher with coprime keys, Playfair 5×5 matrix cipher, Hill 2×2 linear block cipher, Vigenère Cipher, and Plaintext-Autokey Cipher), modern symmetric encryption (AES-256 in Galois/Counter Mode with 96-bit random nonces and 128-bit authentication tags), asymmetric public-key cryptography (RSA-OAEP with 3072-bit keys and SHA-256 digest padding), an end-to-end hybrid envelope workflow, one-way cryptographic hashing (SHA-256 with bit-level avalanche effect demonstrations), and password-based key derivation (PBKDF2-HMAC-SHA-256 at 100,000 iterations). 
 
 Additionally, CipherSentinel integrates a local, in-browser phishing detection engine implementing custom TypeScript tokenization, TF-IDF-style feature extraction, and Logistic Regression inference without external runtime dependencies or server-side telemetry. The entire user interface is fully localized into both English (LTR) and Arabic (native RTL) utilizing locally bundled Thmanyah fonts. 
 
-Rigorous automated testing validates the system: an in-app verification suite (tests T-01 through T-22) and an automated test runner execute 38 assertions with 100% pass rates, zero TypeScript compilation errors, and an optimized production static bundle.
+Rigorous automated testing validates the system: an in-app verification suite (tests T-01 through T-22) and an automated test runner execute 62 assertions across 12 suites with 100% pass rates, zero TypeScript compilation errors, and an optimized production static bundle.
 
 ---
 
@@ -63,7 +63,7 @@ CipherSentinel is strictly a **frontend-only client-side application**. It delib
 ### 4. System Requirements
 
 #### 4.1 Functional Requirements (FR)
-- **FR-1: Classical Cryptography Lab:** Provide interactive Caesar Cipher and Vigenère Cipher execution with strict input validation rejecting non-integer shifts (NaN, ±Infinity, fractions).
+- **FR-1: Classical Cryptography Lab:** Provide interactive execution of eight classical ciphers (Caesar, ROT13, Additive, Multiplicative, Playfair 5×5 matrix, Hill 2×2 matrix, Vigenère, and Plaintext-Autokey) with strict input validation rejecting non-integer shifts (NaN, ±Infinity, fractions), enforcing coprimality ($\gcd(K, 26) = 1$), and displaying interactive 5×5 key grids and modular inverse matrices.
 - **FR-2: Modern Symmetric Authenticated Cryptography:** Provide authenticated encryption and decryption using AES-256-GCM with cryptographically secure random 96-bit nonces, 128-bit authentication tags, and Additional Authenticated Data (AAD) support.
 - **FR-3: Asymmetric Key Transport:** Enable browser-side generation of RSA-3072 key pairs, public key PEM export, and RSA-OAEP key wrapping/unwrapping.
 - **FR-4: Hybrid Message Packaging:** Provide an end-to-end workflow packaging confidential dispatches into versioned envelopes where subject and body are encrypted under AES-GCM and the DEK is wrapped under RSA-OAEP.
@@ -136,7 +136,13 @@ CipherSentinel implements a comprehensive spectrum of cryptographic primitives, 
 | Algorithm | Standard / Reference | Key Size / Parameters | Primary Purpose | Role in CipherSentinel |
 |---|---|---|---|---|
 | **Caesar Cipher** | Historical (Monoalphabetic) | Key space: $\mathbb{Z}_{26}$ (Integer $0 \le k < 26$) | Classical education | Teaches modular arithmetic & shift mechanics; input validation demo |
+| **ROT13** | Historical (Fixed Shift Involution) | Key space: 1 (Fixed $k=13$) | Classical education | Teaches self-reciprocal involutions; keyless transformation |
+| **Additive Cipher** | Historical (Modular Addition) | Key space: $\mathbb{Z}_{26}$ (Integer $K$) | Classical education | Demonstrates mathematical equivalence to Caesar in $(\mathbb{Z}_{26}, +)$ |
+| **Multiplicative Cipher** | Historical (Modular Multiplication) | Key space: 12 coprime keys ($\gcd(K, 26)=1$) | Classical education | Teaches modular multiplicative inverses $K^{-1} \pmod{26}$ |
+| **Playfair Cipher** | Historical (Digraph $5 \times 5$ Matrix) | Key space: $25!$ matrix permutations | Classical education | Teaches polygraphic digraph substitution & filler mechanics |
+| **Hill Cipher** | Historical (Linear Algebra $2 \times 2$) | Key space: $|\text{GL}(2, \mathbb{Z}_{26})| = 157,248$ | Classical education | Teaches matrix multiplication, determinants, and modular inverse matrices |
 | **Vigenère Cipher** | Historical (Polyalphabetic) | Key space: $\Sigma^m$ ($m$-length keyword) | Classical education | Teaches periodic polyalphabetic substitution & frequency resistance |
+| **Autokey Cipher** | Historical (Plaintext-Autokey) | Key space: $\Sigma^m$ initial keyword | Classical education | Teaches non-periodic keystream expansion via recovered plaintext |
 | **AES-256-GCM** | NIST SP 800-38D | 256-bit key, 96-bit nonce, 128-bit tag | Authenticated Symmetric Encryption | Encrypts dispatches; verifies confidentiality, authenticity, and AAD |
 | **RSA-OAEP** | RFC 8017 / PKCS #1 v2.2 | 3072-bit modulus, $e=65537$, SHA-256 | Asymmetric Key Transport | Wraps ephemeral AES Data Encryption Keys (DEKs) |
 | **Hybrid Encryption** | KEM / DEM Architecture | AES-256-GCM + RSA-OAEP-3072 | Complete message protection | Encapsulates AES payload encryption with RSA public key transport |
@@ -145,39 +151,40 @@ CipherSentinel implements a comprehensive spectrum of cryptographic primitives, 
 
 ---
 
-#### 6.1 Classical Ciphers: Caesar and Vigenère
+#### 6.1 The Eight Classical Cipher Algorithms
 
-##### 6.1.1 Caesar Cipher Implementation and Strict Validation
-The Caesar cipher is a monoalphabetic substitution cipher where each letter in the plaintext is shifted by a constant integer offset $k$ modulo 26:
-$$C_i = (P_i + k) \pmod{26}$$
+CipherSentinel includes a dedicated sub-module `src/utils/classicalCiphers/` supporting a comprehensive collection of eight historical cryptographic techniques:
 
-**Defect Remediation and Input Validation:**
-Earlier revisions suffered from subtle edge cases: fractional numbers (e.g., $k=3.5$) were silently truncated via `Math.floor()`, while `Infinity` or `NaN` produced `NaN` index evaluations that yielded NUL (`\x00`) characters via `String.fromCharCode(NaN)`. 
+##### 6.1.1 Caesar Cipher & Additive Cipher
+The Caesar cipher and Additive cipher are mathematically equivalent representations of modular shift addition in the cyclic group $(\mathbb{Z}_{26}, +)$:
+$$C_i = (P_i + K) \pmod{26}, \quad P_i = (C_i - K) \pmod{26}$$
+Both algorithms enforce strict integer key validation via `validateCaesarShift()` and `validateAdditiveKey()`, rejecting fractional numbers (e.g. 3.5), `NaN`, and infinities without silent coercion or NUL character corruption.
 
-The current production implementation introduces `validateCaesarShift()`:
-```typescript
-export function validateCaesarShift(shift: unknown): number {
-  if (typeof shift === 'number') {
-    if (!Number.isFinite(shift) || !Number.isInteger(shift)) {
-      throw new Error('Caesar shift must be a valid integer.');
-    }
-    return ((shift % 26) + 26) % 26;
-  }
-  if (typeof shift === 'string') {
-    const trimmed = shift.trim();
-    if (!/^-?\d+$/.test(trimmed)) {
-      throw new Error('Caesar shift must be a valid integer.');
-    }
-    const parsed = parseInt(trimmed, 10);
-    return ((parsed % 26) + 26) % 26;
-  }
-  throw new Error('Caesar shift must be a valid integer.');
-}
-```
-Non-alphabetic characters (including Arabic script, punctuation, and digits) pass through unaltered, preserving letter case and text structure.
+##### 6.1.2 ROT13 Cipher
+ROT13 is a specialized Caesar cipher with a fixed shift of $K = 13$. Because $13 + 13 = 26 \equiv 0 \pmod{26}$, it is an involution where encryption and decryption execute the exact same transformation:
+$$\text{ROT13}(\text{ROT13}(M)) = M$$
 
-##### 6.1.2 Vigenère Cipher
-The Vigenère cipher applies a polyalphabetic key sequence $K = (k_0, k_1, \dots, k_{m-1})$ repeatedly across the text:
+##### 6.1.3 Multiplicative Cipher
+The Multiplicative cipher transforms letter values via modular multiplication:
+$$C_i = (P_i \times K) \pmod{26}, \quad P_i = (C_i \times K^{-1}) \pmod{26}$$
+Decryption requires the modular multiplicative inverse $K^{-1} \pmod{26}$, which exists if and only if $\gcd(K, 26) = 1$. The system validates coprimality against the 12 valid keys $\{1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25\}$.
+
+##### 6.1.4 Playfair Cipher ($5 \times 5$ Matrix)
+Playfair encrypts digraph letter pairs using a $5 \times 5$ key matrix generated from a keyword with letter `J` merged into `I`. Identical letters in a pair are separated by filler `'X'` (or `'Q'`), and trailing letters are padded. Transformation rules:
+- Same row: shift right (+1) / left (-1) modulo 5.
+- Same column: shift down (+1) / up (-1) modulo 5.
+- Rectangle: swap column indices.
+Decrypted text retains padding and fillers, preserving the exact historical mechanism.
+
+##### 6.1.5 Hill Cipher ($2 \times 2$ Matrix Modulo 26)
+The Hill cipher operates on 2-letter blocks as column vectors $\mathbf{P} = \begin{pmatrix} p_1 \\ p_2 \end{pmatrix}$:
+$$\mathbf{C} = (\mathbf{K} \cdot \mathbf{P}) \pmod{26}, \quad \mathbf{P} = (\mathbf{K}^{-1} \cdot \mathbf{C}) \pmod{26}$$
+The key matrix $\mathbf{K} = \begin{pmatrix} a & b \\ c & d \end{pmatrix}$ is invertible if and only if $\gcd(\det(\mathbf{K}), 26) = 1$, where $\det(\mathbf{K}) = (ad - bc) \pmod{26}$. The inverse matrix is calculated via:
+$$\mathbf{K}^{-1} = (\det(\mathbf{K}))^{-1} \begin{pmatrix} d & -b \\ -c & a \end{pmatrix} \pmod{26}$$
+
+##### 6.1.6 Vigenère Cipher & Plaintext-Autokey Cipher
+- **Vigenère Cipher:** Polyalphabetic substitution using a periodically repeating keyword: $C_i = (P_i + K_{i \bmod m}) \pmod{26}$.
+- **Autokey Cipher (Plaintext Autokey):** Eliminates periodic repetition by extending the keystream with the plaintext itself ($K_{\text{stream}} = K_{\text{word}} \parallel P$). Decryption dynamically recovers plaintext characters to continue extending the keystream.
 $$C_i = (P_i + K_{i \pmod m}) \pmod{26}$$
 CipherSentinel normalizes keywords by stripping non-alphabetic characters, rejecting empty or invalid keywords, and performing cyclic shift additions for uppercase and lowercase ASCII characters.
 
@@ -412,14 +419,15 @@ The Testing Center runs 22 comprehensive integration scenarios:
 Two additional regression suites validate edge-case hardening:
 1. **Caesar Cipher Strict Validation Suite (11 tests):** Verifies zero shift, negative shifts, large shifts with modulo-26 normalization, fractional rejections (1.5, 0.1, -2.7), NaN, ±Infinity, and guarantees that invalid inputs never emit NUL characters.
 2. **AI Custom Vectorizer & Inference Suite (4 tests):** Validates custom unigram/bigram tokenization, TF-IDF feature extraction, Logistic Regression inference, and edge cases (empty strings, whitespace, non-ASCII Unicode).
+3. **Eight Classical Ciphers Comprehensive Verification Suite (25 tests):** Validates all eight classical cipher algorithms against known reference test vectors, complete encryption/decryption round trips, invalid key rejection, odd block padding, filler insertions, and verifies Plaintext-Autokey mechanics.
 
 #### 10.3 Execution Results
 ```
-Total Test Suites: 3
-Total Executed Tests: 38
-Passed: 38 (100%)
+Total Test Suites: 12
+Total Executed Tests: 62
+Passed: 62 (100%)
 Failed: 0 (0%)
-Execution Time: ~400 ms
+Execution Time: ~530 ms
 TypeScript Validation: tsc --noEmit exited with code 0
 ```
 
