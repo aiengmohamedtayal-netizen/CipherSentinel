@@ -18,3 +18,8 @@ __MACOSX/
 Thumbs.db
 ehthumbs.db
 
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
