@@ -28,7 +28,6 @@ export interface EncryptedRecord {
   status: 'Encrypted & Authenticated' | 'Tampered (Simulated)' | 'Integrity Verified';
   ai_risk_band?: 'Lower detected risk' | 'Review recommended' | 'High phishing risk';
   ai_risk_score?: number;
-  decryptedPlaintext?: string;
 }
 
 export interface TestCase {
@@ -51,7 +50,7 @@ export interface ActiveRsaKeyPair {
 }
 
 export interface EncryptedPrivateKeyEnvelope {
-  format: 'PKCS#8-PBKDF2-AES256GCM';
+  format: 'PKCS#8-PBKDF2-AES256GCM' | 'PKCS#8-PBKDF2-AES256GCM-v2';
   iterations: number;
   saltB64: string;
   nonceB64: string;
@@ -61,35 +60,6 @@ export interface EncryptedPrivateKeyEnvelope {
   exportedAt: string;
 }
 
-
-export interface ArchitectureNode {
-  id: string;
-  name: string;
-  category: 'Ingestion' | 'AI Intelligence' | 'Symmetric Crypto' | 'Asymmetric Wrap' | 'Integrity' | 'Storage' | 'Key Management' | 'Classical Sandbox';
-  algorithm: string;
-  standard: string;
-  description: string;
-  securityRole: string;
-  parameters: string;
-  highlights: string[];
-  x: number;
-  y: number;
-}
-
-export interface AlgorithmSpec {
-  id: string;
-  name: string;
-  category: 'Modern Symmetric' | 'Public Key' | 'Cryptographic Hash' | 'Classical Educational';
-  standard: string;
-  keySize: string;
-  nonceSize: string;
-  tagSize: string;
-  securityLevel: string;
-  implementationBasis: string;
-  description: string;
-  mathematicalFormula: string;
-  educationalNotice?: string;
-}
 
 export interface PhishingSample {
   id: string;
@@ -106,7 +76,4 @@ export interface SecurityTelemetry {
   courseReference: string;
   standardsReference: string;
   supportedAlgorithmCount: number;
-  heldOutModelPrecision?: number;
-  integrityVerifiedCount?: number;
-  complianceSpec?: string;
 }

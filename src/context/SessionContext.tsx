@@ -2,10 +2,10 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { EncryptedRecord, TestCase, NavigationTab, ActiveRsaKeyPair } from '../types';
 import { INITIAL_VAULT_RECORDS, INITIAL_SECURITY_TEST_CASES } from '../data/reportData';
 import {
-  executeSecurityTestSuite,
   generateRsaKeyPair,
   generateRandomAesKey,
 } from '../utils/crypto';
+import { executeSecurityTestSuite } from '../utils/securityTestSuite';
 
 interface SessionContextType {
   activeTab: NavigationTab;
@@ -28,6 +28,7 @@ interface SessionContextType {
   lastTestRunTimestamp: string | null;
   stagedMessage: { subject: string; body: string } | null;
   stageMessageForEncryption: (msg: { subject: string; body: string }) => void;
+  clearStagedMessage: () => void;
 }
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
@@ -114,6 +115,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setActiveTab('hybrid');
   };
 
+  const clearStagedMessage = () => setStagedMessage(null);
+
   const runAllTests = async () => {
     setIsTestingInProgress(true);
     try {
@@ -149,6 +152,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         lastTestRunTimestamp,
         stagedMessage,
         stageMessageForEncryption,
+        clearStagedMessage,
       }}
     >
       {children}

@@ -1,0 +1,24 @@
+@font-face { font-family: 'Fraunces'; font-style: normal; font-weight: 300 800; font-display: swap; src: url('./english/Fraunces-Variable.woff2') format('woff2'); }
+@font-face { font-family: 'Fraunces'; font-style: italic; font-weight: 300 700; font-display: swap; src: url('./english/Fraunces-Italic-Variable.woff2') format('woff2'); }
+@font-face { font-family: 'Newsreader'; font-style: normal; font-weight: 300 700; font-display: swap; src: url('./english/Newsreader-Variable.woff2') format('woff2'); }
+@font-face { font-family: 'Newsreader'; font-style: italic; font-weight: 300 700; font-display: swap; src: url('./english/Newsreader-Italic-Variable.woff2') format('woff2'); }
+@font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 300 800; font-display: swap; src: url('./english/PlusJakartaSans-Variable.woff2') format('woff2'); }
+@font-face { font-family: 'Plus Jakarta Sans'; font-style: italic; font-weight: 300 700; font-display: swap; src: url('./english/PlusJakartaSans-Italic-Variable.woff2') format('woff2'); }
+
+@font-face { font-family: 'Thmanyah Sans'; font-style: normal; font-weight: 300; font-display: swap; src: url('./thmanyah/ThmanyahSans-Light.woff2') format('woff2'); }
+@font-face { font-family: 'Thmanyah Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('./thmanyah/ThmanyahSans-Regular.woff2') format('woff2'); }
+@font-face { font-family: 'Thmanyah Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url('./thmanyah/ThmanyahSans-Medium.woff2') format('woff2'); }
+@font-face { font-family: 'Thmanyah Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url('./thmanyah/ThmanyahSans-Bold.woff2') format('woff2'); }
+@font-face { font-family: 'Thmanyah Sans'; font-style: normal; font-weight: 900; font-display: swap; src: url('./thmanyah/ThmanyahSans-Black.woff2') format('woff2'); }
+
+@font-face { font-family: 'Thmanyah Serif Display'; font-style: normal; font-weight: 300; font-display: swap; src: url('./thmanyah/ThmanyahSerifDisplay-Light.woff2') format('woff2'); }
+@font-face { font-family: 'Thmanyah Serif Display'; font-style: normal; font-weight: 400; font-display: swap; src: url('./thmanyah/ThmanyahSerifDisplay-Regular.woff2') format('woff2'); }
+@font-face { font-family: 'Thmanyah Serif Display'; font-style: normal; font-weight: 500; font-display: swap; src: url('./thmanyah/ThmanyahSerifDisplay-Medium.woff2') format('woff2'); }
+@font-face { font-family: 'Thmanyah Serif Display'; font-style: normal; font-weight: 700; font-display: swap; src: url('./thmanyah/ThmanyahSerifDisplay-Bold.woff2') format('woff2'); }
+@font-face { font-family: 'Thmanyah Serif Display'; font-style: normal; font-weight: 900; font-display: swap; src: url('./thmanyah/ThmanyahSerifDisplay-Black.woff2') format('woff2'); }
+
+@font-face { font-family: 'Thmanyah Serif Text'; font-style: normal; font-weight: 300; font-display: swap; src: url('./thmanyah/ThmanyahSerifText-Light.woff2') format('woff2'); }
+@font-face { font-family: 'Thmanyah Serif Text'; font-style: normal; font-weight: 400; font-display: swap; src: url('./thmanyah/ThmanyahSerifText-Regular.woff2') format('woff2'); }
+@font-face { font-family: 'Thmanyah Serif Text'; font-style: normal; font-weight: 500; font-display: swap; src: url('./thmanyah/ThmanyahSerifText-Medium.woff2') format('woff2'); }
+@font-face { font-family: 'Thmanyah Serif Text'; font-style: normal; font-weight: 700; font-display: swap; src: url('./thmanyah/ThmanyahSerifText-Bold.woff2') format('woff2'); }
+@font-face { font-family: 'Thmanyah Serif Text'; font-style: normal; font-weight: 900; font-display: swap; src: url('./thmanyah/ThmanyahSerifText-Black.woff2') format('woff2'); }

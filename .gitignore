@@ -3,6 +3,8 @@ build/
 dist/
 coverage/
 .DS_Store
+*.DS_Store
+__MACOSX/
 *.log
 .env*
 !.env.example

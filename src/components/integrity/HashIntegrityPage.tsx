@@ -1,3 +1,4 @@
+import { useLanguage } from '../../context/LanguageContext';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -17,15 +18,12 @@ import { useSessionActivity } from '../../context/SessionContext';
 import { sha256, verifySha256, computeHexHammingDistance } from '../../utils/crypto';
 
 export const HashIntegrityPage: React.FC = () => {
+  const { t, formatNumber } = useLanguage();
   const { incrementSessionOps } = useSessionActivity();
 
-  const [inputMessage, setInputMessage] = useState<string>(
-    'The quick brown fox jumps over the lazy dog'
-  );
+  const [inputMessage, setInputMessage] = useState<string>(() => t('The quick brown fox jumps over the lazy dog'));
   const [calculatedDigest, setCalculatedDigest] = useState<string>('');
-  const [expectedDigest, setExpectedDigest] = useState<string>(
-    'd7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592'
-  );
+  const [expectedDigest, setExpectedDigest] = useState<string>('');
   const [verificationResult, setVerificationResult] = useState<{
     tested: boolean;
     matches: boolean;
@@ -33,9 +31,7 @@ export const HashIntegrityPage: React.FC = () => {
   const [copied, setCopied] = useState<boolean>(false);
 
   // Avalanche Effect State
-  const [tamperedInput, setTamperedInput] = useState<string>(
-    'The quick brown fox jumps over the lazy dog.' // with trailing period
-  );
+  const [tamperedInput, setTamperedInput] = useState<string>(() => t('The quick brown fox jumps over the lazy dog.'));
   const [tamperedDigest, setTamperedDigest] = useState<string>('');
   const [avalancheStats, setAvalancheStats] = useState<{
     bitsChanged: number;
@@ -46,6 +42,7 @@ export const HashIntegrityPage: React.FC = () => {
   // Auto-calculate initial digest on load
   useEffect(() => {
     handleComputeHash();
+    sha256(inputMessage).then(setExpectedDigest);
   }, []);
 
   const handleComputeHash = async () => {
@@ -106,23 +103,19 @@ export const HashIntegrityPage: React.FC = () => {
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono uppercase tracking-wider bg-[#1F2B1D]/10 dark:bg-white/10 text-[#1F2B1D] dark:text-[#F4EFE6]">
-              Cryptographic Integrity
-            </span>
+              {t("Cryptographic Integrity")}</span>
             <span className="text-xs font-mono text-[#657351] dark:text-[#A3B59E]">
-              NIST FIPS 180-4 • SHA-256
-            </span>
+              {t("NIST FIPS 180-4 • SHA-256")}</span>
           </div>
           <h1 className="font-display text-3xl sm:text-4xl text-[#1F2B1D] dark:text-[#F4EFE6] font-normal tracking-tight">
-            Cryptographic Hashing & Integrity
-          </h1>
+            {t("Cryptographic Hashing & Integrity")}</h1>
           <p className="text-sm sm:text-base text-[#4A5D44] dark:text-[#CBD7C7] font-light max-w-2xl">
-            Compute collision-resistant SHA-256 digests, verify message authenticity against reference hashes, and inspect live bit-level avalanche effects.
-          </p>
+            {t("Compute collision-resistant SHA-256 digests, verify message authenticity against reference hashes, and inspect live bit-level avalanche effects.")}</p>
         </div>
 
         <div className="flex items-center gap-2 text-xs font-mono text-[#657351] dark:text-[#A3B59E] bg-[#F5F2EB] dark:bg-[#1A2619] px-3.5 py-2 rounded-xl border border-[#243324]/10 dark:border-white/10">
           <Hash className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <span>Digest Width: 256 bits (64 hex characters)</span>
+          <span>{t("Digest Width: 256 bits (64 hex characters)")}</span>
         </div>
       </div>
 
@@ -134,18 +127,17 @@ export const HashIntegrityPage: React.FC = () => {
           <div className="p-6 rounded-3xl bg-white dark:bg-[#1A2619] border border-[#243324]/10 dark:border-white/10 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold uppercase tracking-wider text-[#1F2B1D] dark:text-[#F4EFE6]">
-                1. Original Input Text
-              </label>
+                {t("1. Original Input Text")}</label>
               <span className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E]">
-                {inputMessage.length} bytes
-              </span>
+                {formatNumber(new TextEncoder().encode(inputMessage).byteLength)} {t("bytes")}</span>
             </div>
 
             <textarea
               rows={4}
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="Enter message to generate 256-bit SHA-256 digest..."
+              dir="auto"
+              placeholder={t("Enter message to generate 256-bit SHA-256 digest...")}
               className="w-full p-4 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6] leading-relaxed resize-y"
             />
 
@@ -155,7 +147,7 @@ export const HashIntegrityPage: React.FC = () => {
               className="px-5 py-2.5 rounded-full text-xs font-semibold bg-[#1F2B1D] dark:bg-[#CBD7C7] text-white dark:text-[#1F2B1D] hover:bg-[#2C3E2A] dark:hover:bg-white transition-all flex items-center gap-2 cursor-pointer shadow-xs"
             >
               <Zap className="w-3.5 h-3.5" />
-              <span>Calculate SHA-256 Digest</span>
+              <span>{t("Calculate SHA-256 Digest")}</span>
             </button>
           </div>
 
@@ -163,38 +155,36 @@ export const HashIntegrityPage: React.FC = () => {
           <div className="p-6 rounded-3xl bg-white dark:bg-[#1A2619] border border-[#243324]/10 dark:border-white/10 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold uppercase tracking-wider text-[#1F2B1D] dark:text-[#F4EFE6]">
-                2. Calculated SHA-256 Digest
-              </label>
+                {t("2. Calculated SHA-256 Digest")}</label>
               <button
                 type="button"
                 onClick={handleCopyDigest}
                 className="text-xs font-mono text-[#1F2B1D] dark:text-[#CBD7C7] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                <span>{copied ? 'Copied' : 'Copy Digest'}</span>
+                <span>{t(copied ? 'Copied' : 'Copy Digest')}</span>
               </button>
             </div>
 
-            <div className="p-4 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 font-mono text-xs text-[#1F2B1D] dark:text-[#F4EFE6] break-all leading-relaxed select-all">
-              {calculatedDigest || 'Computing digest...'}
+            <div dir="ltr" className="p-4 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 font-mono text-xs text-[#1F2B1D] dark:text-[#F4EFE6] break-all leading-relaxed select-all">
+              {calculatedDigest || t('Computing digest...')}
             </div>
           </div>
 
           {/* Verification Comparison Card */}
           <div className="p-6 rounded-3xl bg-white dark:bg-[#1A2619] border border-[#243324]/10 dark:border-white/10 shadow-xs space-y-4">
             <label className="block text-xs font-semibold uppercase tracking-wider text-[#1F2B1D] dark:text-[#F4EFE6]">
-              3. Integrity Verification Against Expected Reference
-            </label>
+              {t("3. Integrity Verification Against Expected Reference")}</label>
 
             <div className="space-y-1.5">
               <span className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E]">
-                Expected Reference Digest (64 hex characters):
-              </span>
+                {t("Expected Reference Digest (64 hex characters):")}</span>
               <input
                 type="text"
                 value={expectedDigest}
                 onChange={(e) => setExpectedDigest(e.target.value)}
-                placeholder="Paste expected 64-char hash to verify against..."
+                dir="ltr"
+                placeholder={t("Paste expected 64-char hash to verify against...")}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6]"
               />
             </div>
@@ -205,7 +195,7 @@ export const HashIntegrityPage: React.FC = () => {
               className="px-5 py-2.5 rounded-full text-xs font-semibold bg-[#1F2B1D] dark:bg-[#384E36] text-white hover:bg-[#2c402a] transition-all flex items-center gap-2 cursor-pointer shadow-xs"
             >
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Verify Integrity Match</span>
+              <span>{t("Verify Integrity Match")}</span>
             </button>
 
             {/* Verification Result Banner */}
@@ -225,15 +215,13 @@ export const HashIntegrityPage: React.FC = () => {
                     <>
                       <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                       <div>
-                        <strong>INTEGRITY VERIFIED:</strong> The calculated digest matches the expected reference exactly. No modifications detected.
-                      </div>
+                        <strong>{t("INTEGRITY VERIFIED:")}</strong> {t("The calculated digest matches the expected reference exactly. No modifications detected.")}</div>
                     </>
                   ) : (
                     <>
                       <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
                       <div>
-                        <strong>INTEGRITY MISMATCH:</strong> The calculated digest does not match the reference hash. The message has been tampered with or corrupted.
-                      </div>
+                        <strong>{t("INTEGRITY MISMATCH:")}</strong> {t("The calculated digest does not match the reference hash. The message has been tampered with or corrupted.")}</div>
                     </>
                   )}
                 </motion.div>
@@ -249,29 +237,27 @@ export const HashIntegrityPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-[#1F2B1D] dark:text-[#F4EFE6] flex items-center gap-1.5">
                 <Activity className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <span>Avalanche Effect Demonstration</span>
+                <span>{t("Avalanche Effect Demonstration")}</span>
               </h4>
               <button
                 type="button"
                 onClick={handleQuickTamper1Bit}
                 className="text-[11px] font-mono text-rose-700 dark:text-rose-400 hover:underline cursor-pointer"
               >
-                Invert 1 Char →
-              </button>
+                {t("Invert 1 Char →")}</button>
             </div>
 
             <p className="text-xs text-[#4A5D44] dark:text-[#CBD7C7] font-light leading-relaxed">
-              In a secure hash function, changing a single bit in the input must randomly change ~50% of the output bits.
-            </p>
+              {t("In a secure hash function, changing a single bit in the input must randomly change ~50% of the output bits.")}</p>
 
             <div className="space-y-1.5">
               <label className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E]">
-                Tampered / Altered Input Text:
-              </label>
+                {t("Tampered / Altered Input Text:")}</label>
               <input
                 type="text"
                 value={tamperedInput}
                 onChange={(e) => setTamperedInput(e.target.value)}
+                dir="auto"
                 className="w-full px-3.5 py-2 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs font-mono text-[#1F2B1D] dark:text-[#F4EFE6]"
               />
             </div>
@@ -282,7 +268,7 @@ export const HashIntegrityPage: React.FC = () => {
               className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold bg-[#F5F2EB] dark:bg-[#233522] text-[#1F2B1D] dark:text-[#CBD7C7] hover:bg-[#eae5da] dark:hover:bg-[#2c402a] transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Measure Live Bit Difference</span>
+              <span>{t("Measure Live Bit Difference")}</span>
             </button>
 
             {/* Avalanche Metrics */}
@@ -291,19 +277,16 @@ export const HashIntegrityPage: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="font-display text-2xl sm:text-3xl text-[#1F2B1D] dark:text-[#F4EFE6] block">
-                      {avalancheStats.percentChanged}%
-                    </span>
+                      <bdi dir="ltr">{formatNumber(avalancheStats.percentChanged)}{t("%")}</bdi></span>
                     <span className="text-[10px] font-mono uppercase text-[#657351] dark:text-[#A3B59E]">
-                      Output Bits Inverted
-                    </span>
+                      {t("Output Bits Inverted")}</span>
                   </div>
-                  <div className="text-right">
+                  <div className="text-end">
                     <span className="font-display text-xl text-[#1F2B1D] dark:text-[#F4EFE6] block">
-                      {avalancheStats.bitsChanged} / {avalancheStats.totalBits}
+                      <bdi dir="ltr">{formatNumber(avalancheStats.bitsChanged)} {' '}{t("/")}{' '}{formatNumber(avalancheStats.totalBits)}</bdi>
                     </span>
                     <span className="text-[10px] font-mono uppercase text-[#657351] dark:text-[#A3B59E]">
-                      Hamming Distance
-                    </span>
+                      {t("Hamming Distance")}</span>
                   </div>
                 </div>
 
@@ -317,10 +300,9 @@ export const HashIntegrityPage: React.FC = () => {
 
                 <div className="p-3 rounded-xl bg-white dark:bg-[#1A2619] border border-[#243324]/10 dark:border-white/10 space-y-1.5 text-[10px] font-mono text-[#657351] dark:text-[#A3B59E]">
                   <strong className="text-[#1F2B1D] dark:text-[#F4EFE6] block">
-                    Measurement Input Reconciliation:
-                  </strong>
-                  <div>• Pair A (Test T-13): "Message A100" vs "Message A101" &rarr; 140 / 256 bits (54.7%)</div>
-                  <div>• Pair B (Sentence Demo): "The quick brown fox jumps over the lazy dog" vs trailing "." &rarr; 124 / 256 bits (48.4%)</div>
+                    {t("Measurement Input Reconciliation:")}</strong>
+                  <div>{t("• Pair A (Test T-13): \"Message A100\" vs \"Message A101\" &rarr; 140 / 256 bits (54.7%)")}</div>
+                  <div>{t("• Pair B (Sentence Demo): \"The quick brown fox jumps over the lazy dog\" vs trailing \".\" &rarr; 124 / 256 bits (48.4%)")}</div>
                 </div>
               </div>
             )}
@@ -330,17 +312,16 @@ export const HashIntegrityPage: React.FC = () => {
           <div className="p-6 rounded-3xl bg-[#F5F2EB] dark:bg-[#172216] border border-[#243324]/10 dark:border-white/10 space-y-3 text-xs text-[#4A5D44] dark:text-[#CBD7C7] leading-relaxed">
             <h5 className="font-semibold uppercase tracking-wider text-[#1F2B1D] dark:text-[#F4EFE6] flex items-center gap-1.5">
               <Info className="w-4 h-4 text-[#657351] dark:text-[#A3B59E]" />
-              <span>Cryptographic Hashing vs Encryption</span>
+              <span>{t("Cryptographic Hashing vs Encryption")}</span>
             </h5>
             <p>
-              <strong>SHA-256 is an irreversible one-way function.</strong> It possesses no decryption key or reverse operation.
-            </p>
+              <strong>{t("SHA-256 is an irreversible one-way function.")}</strong> {t("It possesses no decryption key or reverse operation.")}</p>
             <p>
-              <strong>Integrity vs Authenticity:</strong> SHA-256 alone detects accidental or malicious modification when compared against a trusted reference. However, it does not authenticate the sender without a secret key (HMAC or digital signature).
-            </p>
+              <strong>{t("Integrity vs Authenticity:")}</strong> {t("SHA-256 alone detects accidental or malicious modification when compared against a trusted reference. However, it does not authenticate the sender without a secret key (HMAC or digital signature).")}</p>
           </div>
         </div>
       </div>
     </div>
   );
 };
+

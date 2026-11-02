@@ -1,3 +1,4 @@
+import { useLanguage } from '../../context/LanguageContext';
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -26,6 +27,7 @@ import {
 } from '../../utils/crypto';
 
 export const KeyManagerPage: React.FC = () => {
+  const { t, localizeError } = useLanguage();
   const {
     activeRsaKey,
     generateNewRsaKey,
@@ -46,7 +48,7 @@ export const KeyManagerPage: React.FC = () => {
 
   // Test Decrypt State
   const [testPassphrase, setTestPassphrase] = useState<string>('');
-  const [testDecryptedResult, setTestDecryptedResult] = useState<string | null>(null);
+  const [testDecryptVerified, setTestDecryptVerified] = useState<boolean>(false);
   const [testDecryptError, setTestDecryptError] = useState<string | null>(null);
 
   const handleCopy = (text: string, section: string) => {
@@ -82,7 +84,7 @@ export const KeyManagerPage: React.FC = () => {
   const handleGenerateRsa = async () => {
     setIsGeneratingRsa(true);
     setEncryptedEnvelope(null);
-    setTestDecryptedResult(null);
+    setTestDecryptVerified(false);
     setTestDecryptError(null);
     try {
       await generateNewRsaKey();
@@ -97,8 +99,8 @@ export const KeyManagerPage: React.FC = () => {
     setIsExporting(true);
 
     try {
-      if (!exportPassphrase || exportPassphrase.length < 8) {
-        throw new Error('Export passphrase must be at least 8 characters in length.');
+      if (!exportPassphrase || exportPassphrase.length < 12) {
+        throw new Error('Export passphrase must be at least 12 characters in length.');
       }
 
       const env = await exportEncryptedPrivateKey(
@@ -113,20 +115,26 @@ export const KeyManagerPage: React.FC = () => {
       setExportError(err.message || 'Key encryption failed.');
     } finally {
       setIsExporting(false);
+      setExportPassphrase('');
     }
   };
 
   const handleTestDecryptPrivateKey = async () => {
     if (!encryptedEnvelope) return;
     setTestDecryptError(null);
-    setTestDecryptedResult(null);
+    setTestDecryptVerified(false);
 
     try {
       const recoveredPem = await importEncryptedPrivateKey(encryptedEnvelope, testPassphrase);
-      setTestDecryptedResult(recoveredPem);
+      if (!activeRsaKey || recoveredPem !== activeRsaKey.privateKeyPem) {
+        throw new Error('The encrypted export did not recover the current private key.');
+      }
+      setTestDecryptVerified(true);
       incrementSessionOps(1);
     } catch (err: any) {
       setTestDecryptError(err.message || 'Decryption failed closed: Incorrect passphrase.');
+    } finally {
+      setTestPassphrase('');
     }
   };
 
@@ -137,18 +145,14 @@ export const KeyManagerPage: React.FC = () => {
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono uppercase tracking-wider bg-[#1F2B1D]/10 dark:bg-white/10 text-[#1F2B1D] dark:text-[#F4EFE6]">
-              Key Infrastructure
-            </span>
+              {t("Key Infrastructure")}</span>
             <span className="text-xs font-mono text-[#657351] dark:text-[#A3B59E]">
-              RSA-3072 OAEP & AES-256
-            </span>
+              {t("RSA-3072 OAEP & AES-256")}</span>
           </div>
           <h1 className="font-display text-3xl sm:text-4xl text-[#1F2B1D] dark:text-[#F4EFE6] font-normal tracking-tight">
-            Cryptographic Key Management
-          </h1>
+            {t("Cryptographic Key Management")}</h1>
           <p className="text-sm sm:text-base text-[#4A5D44] dark:text-[#CBD7C7] font-light max-w-2xl">
-            Generate and manage asymmetric RSA-3072 key pairs for DEK wrapping and export private keys using authenticated PBKDF2 + AES-256-GCM password protection.
-          </p>
+            {t("Generate and manage asymmetric RSA-3072 key pairs for DEK wrapping and export private keys using authenticated PBKDF2 + AES-256-GCM password protection.")}</p>
         </div>
 
         <button
@@ -157,8 +161,8 @@ export const KeyManagerPage: React.FC = () => {
           className="px-4 py-2.5 rounded-full text-xs font-medium bg-[#1F2B1D] dark:bg-[#384E36] text-white hover:bg-[#2c402a] transition-all flex items-center gap-2 shadow-xs cursor-pointer self-start md:self-end"
         >
           <Lock className="w-3.5 h-3.5" />
-          <span>Test in Crypto Lab</span>
-          <ArrowRight className="w-3 h-3" />
+          <span>{t("Test in Crypto Lab")}</span>
+          <ArrowRight className="w-3 h-3 rtl-mirror" />
         </button>
       </div>
 
@@ -174,11 +178,9 @@ export const KeyManagerPage: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="font-display text-lg font-medium text-[#1F2B1D] dark:text-[#F4EFE6]">
-                    Active RSA-3072 OAEP Key Pair
-                  </h3>
+                    {t("Active RSA-3072 OAEP Key Pair")}</h3>
                   <span className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E]">
-                    RFC 8017 / PKCS #1 v2.2 • Modulus: 3072 bits • Hash: SHA-256
-                  </span>
+                    {t("RFC 8017 / PKCS #1 v2.2 • Modulus: 3072 bits • Hash: SHA-256")}</span>
                 </div>
               </div>
 
@@ -189,7 +191,7 @@ export const KeyManagerPage: React.FC = () => {
                 className="px-4 py-2 rounded-full text-xs font-semibold bg-[#1F2B1D] dark:bg-[#CBD7C7] text-white dark:text-[#1F2B1D] hover:bg-[#2C3E2A] dark:hover:bg-white transition-all flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingRsa ? 'animate-spin' : ''}`} />
-                <span>{isGeneratingRsa ? 'Generating 3072-bit Key...' : 'Generate Fresh RSA-3072'}</span>
+                <span>{t(isGeneratingRsa ? 'Generating 3072-bit Key...' : 'Generate Fresh RSA-3072')}</span>
               </button>
             </div>
 
@@ -197,19 +199,17 @@ export const KeyManagerPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="p-4 rounded-2xl bg-[#F5F2EB] dark:bg-[#131D12] border border-[#243324]/10 dark:border-white/10 space-y-1">
                 <span className="text-[10px] uppercase font-mono tracking-wider text-[#657351] dark:text-[#A3B59E]">
-                  Key Identifier (Key ID)
-                </span>
+                  {t("Key Identifier (Key ID)")}</span>
                 <p className="font-mono text-xs font-bold text-[#1F2B1D] dark:text-[#F4EFE6] truncate">
-                  {activeRsaKey ? activeRsaKey.keyId : 'Generating...'}
+                  <bdi dir="ltr">{activeRsaKey ? activeRsaKey.keyId : t('Generating...')}</bdi>
                 </p>
               </div>
 
               <div className="p-4 rounded-2xl bg-[#F5F2EB] dark:bg-[#131D12] border border-[#243324]/10 dark:border-white/10 space-y-1">
                 <span className="text-[10px] uppercase font-mono tracking-wider text-[#657351] dark:text-[#A3B59E]">
-                  Public Key SHA-256 Fingerprint
-                </span>
+                  {t("Public Key SHA-256 Fingerprint")}</span>
                 <p className="font-mono text-xs font-bold text-[#1F2B1D] dark:text-[#F4EFE6] truncate">
-                  {activeRsaKey ? activeRsaKey.publicKeyFingerprint : 'Calculating...'}
+                  <bdi dir="ltr">{activeRsaKey ? activeRsaKey.publicKeyFingerprint : t('Calculating...')}</bdi>
                 </p>
               </div>
             </div>
@@ -218,8 +218,7 @@ export const KeyManagerPage: React.FC = () => {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold uppercase tracking-wider text-[#1F2B1D] dark:text-[#F4EFE6]">
-                  Public Key (SPKI PEM Format - RSA-3072)
-                </label>
+                  {t("Public Key (SPKI PEM Format - RSA-3072)")}</label>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -231,22 +230,22 @@ export const KeyManagerPage: React.FC = () => {
                     ) : (
                       <Copy className="w-3 h-3" />
                     )}
-                    <span>{copiedSection === 'public' ? 'Copied' : 'Copy PEM'}</span>
+                    <span>{t(copiedSection === 'public' ? 'Copied' : 'Copy PEM')}</span>
                   </button>
-                  <span>•</span>
+                  <span>{t("•")}</span>
                   <button
                     type="button"
                     onClick={handleDownloadPublicKey}
                     className="text-xs font-mono text-[#1F2B1D] dark:text-[#CBD7C7] hover:underline flex items-center gap-1 cursor-pointer"
                   >
                     <Download className="w-3 h-3" />
-                    <span>Download</span>
+                    <span>{t("Download")}</span>
                   </button>
                 </div>
               </div>
 
-              <pre className="p-4 rounded-2xl bg-[#FBF9F5] dark:bg-[#10190F] border border-[#243324]/15 dark:border-white/15 font-mono text-[11px] text-[#1F2B1D] dark:text-[#CBD7C7] overflow-x-auto max-h-40 leading-relaxed">
-                {activeRsaKey ? activeRsaKey.publicKeyPem : 'Loading public key...'}
+              <pre dir="ltr" className="p-4 rounded-2xl bg-[#FBF9F5] dark:bg-[#10190F] border border-[#243324]/15 dark:border-white/15 font-mono text-[11px] text-[#1F2B1D] dark:text-[#CBD7C7] overflow-x-auto max-h-40 leading-relaxed">
+                {activeRsaKey ? activeRsaKey.publicKeyPem : t('Loading public key...')}
               </pre>
             </div>
 
@@ -256,12 +255,10 @@ export const KeyManagerPage: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <Shield className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   <label className="text-xs font-semibold uppercase tracking-wider text-[#1F2B1D] dark:text-[#F4EFE6]">
-                    Password-Based Private Key Export (PKCS#8 + PBKDF2 + AES-GCM)
-                  </label>
+                    {t("Password-Based Private Key Export (PKCS#8 + PBKDF2 + AES-GCM)")}</label>
                 </div>
                 <p className="text-xs text-[#4A5D44] dark:text-[#CBD7C7] font-light">
-                  A simple toggle is not cryptographic protection. Private keys are encrypted using a 256-bit AES key derived from your passphrase via PBKDF2 (100,000 iterations, SHA-256, 16-byte random salt).
-                </p>
+                  {t("A simple toggle is not cryptographic protection. Private keys are encrypted using a 256-bit AES key derived from your passphrase via PBKDF2 (100,000 iterations, SHA-256, 16-byte random salt).")}</p>
               </div>
 
               {/* Passphrase Input & Action */}
@@ -271,7 +268,9 @@ export const KeyManagerPage: React.FC = () => {
                     type="password"
                     value={exportPassphrase}
                     onChange={(e) => setExportPassphrase(e.target.value)}
-                    placeholder="Enter passphrase to encrypt private key (min 8 chars)..."
+                    minLength={12}
+                    maxLength={256}
+                    placeholder={t("Enter passphrase to encrypt private key (min 12 chars)...")}
                     className="flex-1 px-4 py-2.5 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs font-sans focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6]"
                   />
                   <button
@@ -280,13 +279,13 @@ export const KeyManagerPage: React.FC = () => {
                     disabled={isExporting || !exportPassphrase || exportPassphrase.length < 8}
                     className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#1F2B1D] dark:bg-[#CBD7C7] text-white dark:text-[#1F2B1D] hover:bg-[#2C3E2A] dark:hover:bg-white transition-all cursor-pointer shadow-xs disabled:opacity-50 shrink-0"
                   >
-                    {isExporting ? 'Deriving & Encrypting...' : 'Encrypt & Export Private Key'}
+                    {t(isExporting ? 'Deriving & Encrypting...' : 'Encrypt & Export Private Key')}
                   </button>
                 </div>
 
                 {exportError && (
                   <p className="text-xs text-rose-600 dark:text-rose-400 font-mono">
-                    {exportError}
+                    {localizeError(exportError)}
                   </p>
                 )}
               </div>
@@ -303,7 +302,7 @@ export const KeyManagerPage: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-mono font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
                         <CheckCircle2 className="w-4 h-4" />
-                        <span>Authenticated Encrypted Private Key Envelope</span>
+                        <span>{t("Authenticated Encrypted Private Key Envelope")}</span>
                       </span>
 
                       <div className="flex items-center gap-2">
@@ -312,34 +311,33 @@ export const KeyManagerPage: React.FC = () => {
                           onClick={() => handleCopy(JSON.stringify(encryptedEnvelope, null, 2), 'envelope')}
                           className="text-xs font-mono text-[#1F2B1D] dark:text-[#CBD7C7] hover:underline cursor-pointer"
                         >
-                          {copiedSection === 'envelope' ? 'Copied JSON!' : 'Copy JSON'}
+                          {t(copiedSection === 'envelope' ? 'Copied JSON!' : 'Copy JSON')}
                         </button>
-                        <span>•</span>
+                        <span>{t("•")}</span>
                         <button
                           type="button"
                           onClick={handleDownloadEncryptedKey}
                           className="text-xs font-mono text-[#1F2B1D] dark:text-[#CBD7C7] hover:underline cursor-pointer"
                         >
-                          Download .json
-                        </button>
+                          {t("Download .json")}</button>
                       </div>
                     </div>
 
-                    <pre className="p-3.5 rounded-xl bg-white dark:bg-[#0D140C] border border-[#243324]/10 dark:border-white/10 font-mono text-[11px] overflow-x-auto text-[#1F2B1D] dark:text-[#CBD7C7] max-h-40 leading-relaxed">
+                    <pre dir="ltr" className="p-3.5 rounded-xl bg-white dark:bg-[#0D140C] border border-[#243324]/10 dark:border-white/10 font-mono text-[11px] overflow-x-auto text-[#1F2B1D] dark:text-[#CBD7C7] max-h-40 leading-relaxed">
                       {JSON.stringify(encryptedEnvelope, null, 2)}
                     </pre>
 
                     {/* Test Decrypt With Passphrase (Negative & Positive Verification) */}
                     <div className="pt-2 border-t border-[#243324]/10 dark:border-white/10 space-y-2">
                       <span className="text-[11px] font-mono uppercase tracking-wider text-[#657351] dark:text-[#A3B59E] block">
-                        Verify Decryption With Passphrase
-                      </span>
+                        {t("Verify Decryption With Passphrase")}</span>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input
                           type="password"
                           value={testPassphrase}
+                          maxLength={256}
                           onChange={(e) => setTestPassphrase(e.target.value)}
-                          placeholder="Enter passphrase to test decryption..."
+                          placeholder={t("Enter passphrase to test decryption...")}
                           className="flex-1 px-3.5 py-2 rounded-xl bg-white dark:bg-[#1A2619] border border-[#243324]/15 dark:border-white/15 text-xs font-sans text-[#1F2B1D] dark:text-[#F4EFE6]"
                         />
                         <button
@@ -347,21 +345,20 @@ export const KeyManagerPage: React.FC = () => {
                           onClick={handleTestDecryptPrivateKey}
                           className="px-4 py-2 rounded-xl text-xs font-medium bg-[#1F2B1D] dark:bg-[#384E36] text-white hover:bg-[#2c402a] cursor-pointer shrink-0"
                         >
-                          Test Decrypt
-                        </button>
+                          {t("Test Decrypt")}</button>
                       </div>
 
-                      {testDecryptedResult && (
+                      {testDecryptVerified && (
                         <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-900 dark:text-emerald-200 font-mono flex items-center gap-2">
                           <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                          <span>Decryption verified: Correct passphrase recovered private key.</span>
+                          <span>{t("Decryption verified: Correct passphrase recovered private key.")}</span>
                         </div>
                       )}
 
                       {testDecryptError && (
                         <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-900 dark:text-rose-200 font-mono flex items-center gap-2">
                           <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-                          <span>{testDecryptError}</span>
+                          <span>{localizeError(testDecryptError)}</span>
                         </div>
                       )}
                     </div>
@@ -383,11 +380,9 @@ export const KeyManagerPage: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="font-display text-base font-medium text-[#1F2B1D] dark:text-[#F4EFE6]">
-                    Active AES-256 DEK
-                  </h3>
+                    {t("Active AES-256 DEK")}</h3>
                   <span className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E]">
-                    Symmetric Payload Key (256 bits)
-                  </span>
+                    {t("Symmetric Payload Key (256 bits)")}</span>
                 </div>
               </div>
 
@@ -397,15 +392,14 @@ export const KeyManagerPage: React.FC = () => {
                 className="text-xs font-mono text-[#1F2B1D] dark:text-[#CBD7C7] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <RefreshCw className="w-3 h-3" />
-                <span>New DEK</span>
+                <span>{t("New DEK")}</span>
               </button>
             </div>
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E]">
-                  Base64 Encoded Key (32 bytes):
-                </span>
+                  {t("Base64 Encoded Key (32 bytes):")}</span>
                 <button
                   type="button"
                   onClick={() => handleCopy(activeAesKeyB64, 'aes')}
@@ -421,7 +415,7 @@ export const KeyManagerPage: React.FC = () => {
               </div>
 
               <div className="p-3.5 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 font-mono text-xs text-[#1F2B1D] dark:text-[#F4EFE6] break-all select-all">
-                {activeAesKeyB64 || 'Generating 256-bit AES key...'}
+                <bdi dir="ltr">{activeAesKeyB64 || t('Generating 256-bit AES key...')}</bdi>
               </div>
             </div>
           </div>
@@ -430,34 +424,29 @@ export const KeyManagerPage: React.FC = () => {
           <div className="p-6 rounded-3xl bg-[#F5F2EB] dark:bg-[#172216] border border-[#243324]/10 dark:border-white/10 space-y-4 text-xs text-[#4A5D44] dark:text-[#CBD7C7] leading-relaxed">
             <h4 className="font-semibold uppercase tracking-wider text-[#1F2B1D] dark:text-[#F4EFE6] flex items-center gap-2">
               <Layers className="w-4 h-4 text-[#657351] dark:text-[#A3B59E]" />
-              <span>Hybrid Key Role Separation</span>
+              <span>{t("Hybrid Key Role Separation")}</span>
             </h4>
 
             <div className="space-y-2.5">
               <div className="p-3 rounded-xl bg-white dark:bg-[#1E2E1D] border border-[#243324]/10 dark:border-white/10 space-y-1">
                 <strong className="text-[#1F2B1D] dark:text-[#F4EFE6] block">
-                  1. Symmetric Data Encryption Key (DEK)
-                </strong>
+                  {t("1. Symmetric Data Encryption Key (DEK)")}</strong>
                 <p>
-                  AES-256-GCM is computationally efficient for high-throughput payload encryption, providing confidentiality and a 128-bit authentication tag.
-                </p>
+                  {t("AES-256-GCM is computationally efficient for high-throughput payload encryption, providing confidentiality and a 128-bit authentication tag.")}</p>
               </div>
 
               <div className="p-3 rounded-xl bg-white dark:bg-[#1E2E1D] border border-[#243324]/10 dark:border-white/10 space-y-1">
                 <strong className="text-[#1F2B1D] dark:text-[#F4EFE6] block">
-                  2. Asymmetric Key Pair (RSA-3072 OAEP)
-                </strong>
+                  {t("2. Asymmetric Key Pair (RSA-3072 OAEP)")}</strong>
                 <p>
-                  RSA-3072 OAEP encrypts the short 32-byte AES DEK, eliminating the risk of transmitting shared symmetric secrets across untrusted networks.
-                </p>
+                  {t("RSA-3072 OAEP wraps the 32-byte AES DEK for the intended public key. This frontend demonstration does not implement network transport.")}</p>
               </div>
             </div>
 
             <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 text-[11px] flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
               <span>
-                <strong>Zero-Persistence Rule:</strong> Private keys and decrypted plaintext are kept exclusively in volatile browser memory and never written to localStorage or plain text logs.
-              </span>
+                <strong>{t("Educational key handling:")}</strong> {t("Active keys and decrypted plaintext remain in browser memory for this session. The AES key is visible in this screen, and private-key export creates a passphrase-encrypted file. This UI is not production key custody; refreshing or generating a new RSA pair makes existing vault records undecryptable, and the app cannot restore them from an export.")}</span>
             </div>
           </div>
         </div>
@@ -465,3 +454,4 @@ export const KeyManagerPage: React.FC = () => {
     </div>
   );
 };
+

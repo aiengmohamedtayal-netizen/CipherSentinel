@@ -7,7 +7,7 @@
  * - SHA-256: One-way cryptographic hash function (NIST FIPS 180-4)
  * - AES-256-GCM: Non-deterministic authenticated symmetric cipher (NIST SP 800-38D)
  * - RSA-OAEP: Public-key key transport & DEK wrapping (RFC 8017 / PKCS #1 v2.2) via Web Crypto API
- * - TF-IDF + Logistic Regression: Offline Machine Learning message risk classifier
+ * - TF-IDF + Logistic Regression: In-browser threat evaluator using custom TypeScript TF-IDF-style feature extraction and Logistic Regression inference with stored model coefficients
  */
 
 import { TestCase, EncryptedRecord } from '../types';
@@ -18,16 +18,6 @@ export function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
-}
-
-// Convert Hex string to Uint8Array
-export function hexToBytes(hex: string): Uint8Array {
-  const cleanHex = hex.replace(/[^0-9a-fA-F]/g, '');
-  const bytes = new Uint8Array(Math.ceil(cleanHex.length / 2));
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(cleanHex.substring(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
 }
 
 // Convert Uint8Array to Base64
@@ -89,14 +79,40 @@ export function computeHexHammingDistance(
  * ===================================================================== */
 
 /**
+ * Validates a Caesar cipher shift value.
+ * Shift must be a finite integer number. Rejects NaN, Infinity, -Infinity,
+ * fractional values, and invalid numeric strings/types without silent coercion.
+ */
+export function validateCaesarShift(shift: unknown): number {
+  if (typeof shift === 'number') {
+    if (!Number.isFinite(shift) || !Number.isInteger(shift)) {
+      throw new Error('Caesar shift must be a valid integer.');
+    }
+    return shift;
+  }
+
+  if (typeof shift === 'string') {
+    const trimmed = shift.trim();
+    if (!/^-?\d+$/.test(trimmed)) {
+      throw new Error('Caesar shift must be a valid integer.');
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || !Number.isSafeInteger(parsed)) {
+      throw new Error('Caesar shift must be a valid integer.');
+    }
+    return parsed;
+  }
+
+  throw new Error('Caesar shift must be a valid integer.');
+}
+
+/**
  * Caesar Cipher: E(x) = (x + k) mod 26
  * Preserves letter casing; non-alphabetic characters remain unshifted.
  */
 export function caesarEncrypt(text: string, shift: number): string {
-  if (typeof shift !== 'number' || isNaN(shift)) {
-    throw new Error('Caesar shift must be a valid integer.');
-  }
-  const normalizedShift = ((Math.floor(shift) % 26) + 26) % 26;
+  const validShift = validateCaesarShift(shift);
+  const normalizedShift = ((validShift % 26) + 26) % 26;
   return text
     .split('')
     .map((char) => {
@@ -116,10 +132,8 @@ export function caesarEncrypt(text: string, shift: number): string {
  * Caesar Decrypt: D(x) = (x - k) mod 26
  */
 export function caesarDecrypt(text: string, shift: number): string {
-  if (typeof shift !== 'number' || isNaN(shift)) {
-    throw new Error('Caesar shift must be a valid integer.');
-  }
-  return caesarEncrypt(text, -shift);
+  const validShift = validateCaesarShift(shift);
+  return caesarEncrypt(text, -validShift);
 }
 
 /**
@@ -201,12 +215,19 @@ export async function verifySha256(
   text: string,
   expectedHex: string
 ): Promise<{ matches: boolean; computedDigest: string; expectedDigest: string }> {
+  if (typeof expectedHex !== 'string') {
+    throw new Error('Expected SHA-256 digest must be exactly 64 hexadecimal characters.');
+  }
+  const normalizedExpected = expectedHex.trim();
+  if (!/^[a-f0-9]{64}$/i.test(normalizedExpected)) {
+    throw new Error('Expected SHA-256 digest must be exactly 64 hexadecimal characters.');
+  }
   const computed = await sha256(text);
-  const normalizedExpected = expectedHex.trim().toLowerCase().replace(/[^0-9a-f]/g, '');
+  const normalized = normalizedExpected.toLowerCase();
   return {
-    matches: computed === normalizedExpected,
+    matches: computed === normalized,
     computedDigest: computed,
-    expectedDigest: normalizedExpected,
+    expectedDigest: normalized,
   };
 }
 
@@ -221,6 +242,9 @@ export interface AesGcmResult {
   keyB64: string;
   fullCiphertextHex: string;
 }
+
+export const MAX_ENVELOPE_PLAINTEXT_BYTES = 128 * 1024;
+export const RSA_3072_CIPHERTEXT_BYTES = 384;
 
 /**
  * Generates a cryptographically secure 256-bit (32-byte) AES key.
@@ -251,7 +275,6 @@ export function generateGcmNonce(): Uint8Array {
 export async function aesGcmEncrypt(
   plaintext: string,
   providedKeyB64?: string,
-  providedNonceB64?: string,
   aadText?: string
 ): Promise<AesGcmResult> {
   const encoder = new TextEncoder();
@@ -282,28 +305,20 @@ export async function aesGcmEncrypt(
     keyBytes = new Uint8Array(exportedRaw);
   }
 
-  // 2. Prepare Unique 96-bit (12-byte) Nonce
-  let nonceBytes: Uint8Array;
-  if (providedNonceB64) {
-    nonceBytes = base64ToBytes(providedNonceB64);
-    if (nonceBytes.length !== 12) {
-      throw new Error('AES-GCM nonce must be exactly 12 bytes (96 bits).');
-    }
-  } else {
-    nonceBytes = generateGcmNonce();
-  }
+  // Always generate a fresh nonce here. Reusing a caller-supplied GCM nonce is unsafe.
+  const nonceBytes = generateGcmNonce();
 
   // 3. Authenticated Additional Data (AAD)
-  const additionalData = aadText ? encoder.encode(aadText) : undefined;
+  const algorithm: AesGcmParams = {
+    name: 'AES-GCM',
+    iv: nonceBytes,
+    tagLength: 128,
+  };
+  if (aadText) algorithm.additionalData = encoder.encode(aadText);
 
   // 4. Encrypt with 128-bit authentication tag
   const encryptedBuffer = await window.crypto.subtle.encrypt(
-    {
-      name: 'AES-GCM',
-      iv: nonceBytes,
-      additionalData,
-      tagLength: 128,
-    },
+    algorithm,
     cryptoKey,
     data
   );
@@ -352,15 +367,15 @@ export async function aesGcmDecrypt(
     );
 
     const encoder = new TextEncoder();
-    const additionalData = aadText ? encoder.encode(aadText) : undefined;
+    const algorithm: AesGcmParams = {
+      name: 'AES-GCM',
+      iv: nonceBytes,
+      tagLength: 128,
+    };
+    if (aadText) algorithm.additionalData = encoder.encode(aadText);
 
     const decryptedBuffer = await window.crypto.subtle.decrypt(
-      {
-        name: 'AES-GCM',
-        iv: nonceBytes,
-        additionalData,
-        tagLength: 128,
-      },
+      algorithm,
       cryptoKey,
       combined
     );
@@ -509,7 +524,7 @@ export async function unwrapAesKeyWithRsa(
 }
 
 export interface EncryptedPrivateKeyEnvelope {
-  format: 'PKCS#8-PBKDF2-AES256GCM';
+  format: 'PKCS#8-PBKDF2-AES256GCM' | 'PKCS#8-PBKDF2-AES256GCM-v2';
   iterations: number;
   saltB64: string;
   nonceB64: string;
@@ -517,6 +532,65 @@ export interface EncryptedPrivateKeyEnvelope {
   tagB64: string;
   keyId: string;
   exportedAt: string;
+}
+
+const PRIVATE_KEY_EXPORT_ITERATIONS = 100_000;
+const PRIVATE_KEY_EXPORT_FORMAT_V1 = 'PKCS#8-PBKDF2-AES256GCM';
+const PRIVATE_KEY_EXPORT_FORMAT_V2 = 'PKCS#8-PBKDF2-AES256GCM-v2';
+const MAX_PRIVATE_KEY_EXPORT_BYTES = 64 * 1024;
+
+function privateKeyEnvelopeAad(envelope: EncryptedPrivateKeyEnvelope): Uint8Array {
+  const encoder = new TextEncoder();
+  return encoder.encode([
+    envelope.format,
+    envelope.iterations,
+    envelope.keyId,
+    envelope.exportedAt,
+    envelope.saltB64,
+    envelope.nonceB64,
+  ].join('\n'));
+}
+
+function decodePrivateKeyEnvelopeBase64(value: unknown, fieldName: string): Uint8Array {
+  const canonicalBase64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+  if (typeof value !== 'string' || value.length === 0 || !canonicalBase64.test(value)) {
+    throw new Error(`Private key envelope has an invalid ${fieldName} field.`);
+  }
+  const bytes = base64ToBytes(value);
+  if (bytesToBase64(bytes) !== value) {
+    throw new Error(`Private key envelope has a non-canonical ${fieldName} field.`);
+  }
+  return bytes;
+}
+
+function validatePrivateKeyExportEnvelope(envelope: EncryptedPrivateKeyEnvelope) {
+  if (!envelope || typeof envelope !== 'object') {
+    throw new Error('Private key envelope must be an object.');
+  }
+  if (envelope.format !== PRIVATE_KEY_EXPORT_FORMAT_V1 && envelope.format !== PRIVATE_KEY_EXPORT_FORMAT_V2) {
+    throw new Error('Unsupported private key envelope format.');
+  }
+  if (envelope.iterations !== PRIVATE_KEY_EXPORT_ITERATIONS) {
+    throw new Error('Private key envelope uses an unsupported PBKDF2 iteration count.');
+  }
+  if (typeof envelope.keyId !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/.test(envelope.keyId)) {
+    throw new Error('Private key envelope has an invalid key identifier.');
+  }
+  if (typeof envelope.exportedAt !== 'string' || !Number.isFinite(Date.parse(envelope.exportedAt))) {
+    throw new Error('Private key envelope has an invalid export timestamp.');
+  }
+
+  const saltBytes = decodePrivateKeyEnvelopeBase64(envelope.saltB64, 'salt');
+  const nonceBytes = decodePrivateKeyEnvelopeBase64(envelope.nonceB64, 'nonce');
+  const ciphertextBytes = decodePrivateKeyEnvelopeBase64(envelope.ciphertextB64, 'ciphertext');
+  const tagBytes = decodePrivateKeyEnvelopeBase64(envelope.tagB64, 'authentication tag');
+  if (saltBytes.byteLength !== 16 || nonceBytes.byteLength !== 12 || tagBytes.byteLength !== 16) {
+    throw new Error('Private key envelope has an invalid salt, nonce, or authentication-tag length.');
+  }
+  if (ciphertextBytes.byteLength === 0 || ciphertextBytes.byteLength > MAX_PRIVATE_KEY_EXPORT_BYTES) {
+    throw new Error('Private key envelope ciphertext has an invalid length.');
+  }
+  return { saltBytes, nonceBytes, ciphertextBytes, tagBytes };
 }
 
 /**
@@ -528,8 +602,14 @@ export async function exportEncryptedPrivateKey(
   passphrase: string,
   keyId: string
 ): Promise<EncryptedPrivateKeyEnvelope> {
-  if (!passphrase || passphrase.length < 8) {
-    throw new Error('Export passphrase must be at least 8 characters in length.');
+  if (typeof passphrase !== 'string' || passphrase.length < 12) {
+    throw new Error('Export passphrase must be at least 12 characters in length.');
+  }
+  if (typeof privateKeyPem !== 'string' || privateKeyPem.length === 0 || privateKeyPem.length > MAX_PRIVATE_KEY_EXPORT_BYTES) {
+    throw new Error('Private key data is empty or exceeds the supported export size.');
+  }
+  if (!/^[A-Za-z0-9._-]{1,128}$/.test(keyId)) {
+    throw new Error('Private key export has an invalid key identifier.');
   }
 
   const encoder = new TextEncoder();
@@ -552,7 +632,7 @@ export async function exportEncryptedPrivateKey(
     {
       name: 'PBKDF2',
       salt: saltBytes,
-      iterations: 100000,
+      iterations: PRIVATE_KEY_EXPORT_ITERATIONS,
       hash: 'SHA-256',
     },
     baseKey,
@@ -562,8 +642,18 @@ export async function exportEncryptedPrivateKey(
   );
 
   // 2. Encrypt PKCS#8 private key
+  const envelope: EncryptedPrivateKeyEnvelope = {
+    format: PRIVATE_KEY_EXPORT_FORMAT_V2,
+    iterations: PRIVATE_KEY_EXPORT_ITERATIONS,
+    saltB64: bytesToBase64(saltBytes),
+    nonceB64: bytesToBase64(nonceBytes),
+    ciphertextB64: '',
+    tagB64: '',
+    keyId,
+    exportedAt: new Date().toISOString(),
+  };
   const encryptedBuffer = await window.crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: nonceBytes },
+    { name: 'AES-GCM', iv: nonceBytes, additionalData: privateKeyEnvelopeAad(envelope), tagLength: 128 },
     derivedAesKey,
     encoder.encode(privateKeyPem)
   );
@@ -574,14 +664,9 @@ export async function exportEncryptedPrivateKey(
   const tagBytes = encryptedArray.slice(tagStart);
 
   return {
-    format: 'PKCS#8-PBKDF2-AES256GCM',
-    iterations: 100000,
-    saltB64: bytesToBase64(saltBytes),
-    nonceB64: bytesToBase64(nonceBytes),
+    ...envelope,
     ciphertextB64: bytesToBase64(ciphertextBytes),
     tagB64: bytesToBase64(tagBytes),
-    keyId,
-    exportedAt: new Date().toISOString(),
   };
 }
 
@@ -592,17 +677,14 @@ export async function importEncryptedPrivateKey(
   envelope: EncryptedPrivateKeyEnvelope,
   passphrase: string
 ): Promise<string> {
-  if (!passphrase) {
+  if (typeof passphrase !== 'string' || passphrase.length === 0) {
     throw new Error('Passphrase is required to decrypt the private key.');
   }
 
+  const { saltBytes, nonceBytes, ciphertextBytes, tagBytes } = validatePrivateKeyExportEnvelope(envelope);
+
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
-
-  const saltBytes = base64ToBytes(envelope.saltB64);
-  const nonceBytes = base64ToBytes(envelope.nonceB64);
-  const ciphertextBytes = base64ToBytes(envelope.ciphertextB64);
-  const tagBytes = base64ToBytes(envelope.tagB64);
 
   const combined = new Uint8Array(ciphertextBytes.length + tagBytes.length);
   combined.set(ciphertextBytes, 0);
@@ -621,7 +703,7 @@ export async function importEncryptedPrivateKey(
       {
         name: 'PBKDF2',
         salt: saltBytes,
-        iterations: envelope.iterations || 100000,
+        iterations: envelope.iterations,
         hash: 'SHA-256',
       },
       baseKey,
@@ -631,7 +713,9 @@ export async function importEncryptedPrivateKey(
     );
 
     const decryptedBuffer = await window.crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: nonceBytes },
+      envelope.format === PRIVATE_KEY_EXPORT_FORMAT_V2
+        ? { name: 'AES-GCM', iv: nonceBytes, additionalData: privateKeyEnvelopeAad(envelope), tagLength: 128 }
+        : { name: 'AES-GCM', iv: nonceBytes, tagLength: 128 },
       derivedAesKey,
       combined
     );
@@ -646,14 +730,6 @@ export async function importEncryptedPrivateKey(
 // Backward compatibility helpers
 export const wrapDekWithRsa = wrapAesKeyWithRsa;
 export const unwrapDekWithRsa = unwrapAesKeyWithRsa;
-
-export function generateDefaultRsaMetadata(): { publicKeyFingerprint: string; publicKeyPem: string; privateKeyId: string } {
-  return {
-    publicKeyFingerprint: 'SHA256:7e8d4a92c3b1e5f08927163829ad4102',
-    publicKeyPem: '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...\n-----END PUBLIC KEY-----',
-    privateKeyId: 'rsa-oaep-primary-session',
-  };
-}
 
 
 /* =====================================================================
@@ -670,16 +746,25 @@ export function generateDefaultRsaMetadata(): { publicKeyFingerprint: string; pu
 export async function createEncryptedEnvelope(
   plaintext: string,
   recipientRsaPublicKey: CryptoKey | string,
-  keyId: string,
-  subject: string = 'Secure Message Dispatch'
+  keyId: string
 ): Promise<EncryptedRecord> {
+  if (!plaintext.trim()) {
+    throw new Error('Message content is required before creating an encrypted envelope.');
+  }
+  if (new TextEncoder().encode(plaintext).byteLength > MAX_ENVELOPE_PLAINTEXT_BYTES) {
+    throw new Error(`Message content must not exceed ${MAX_ENVELOPE_PLAINTEXT_BYTES / 1024} KB.`);
+  }
+  if (!keyId || !keyId.startsWith('rsa-cs-')) {
+    throw new Error('A valid active RSA-3072 key identifier is required.');
+  }
+
   // 1. Generate fresh AES DEK
   const { keyB64 } = generateRandomAesKey();
 
   // 2. Encrypt with AES-256-GCM
   const recordId = 'rec-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
   const aad = `record_id=${recordId};key_id=${keyId}`;
-  const gcmResult = await aesGcmEncrypt(plaintext, keyB64, undefined, aad);
+  const gcmResult = await aesGcmEncrypt(plaintext, keyB64, aad);
 
   // 3. Wrap DEK with RSA-OAEP
   const wrappedDekB64 = await wrapAesKeyWithRsa(keyB64, recipientRsaPublicKey);
@@ -694,7 +779,7 @@ export async function createEncryptedEnvelope(
     ciphertext_b64: gcmResult.ciphertextB64,
     tag_b64: gcmResult.tagB64,
     created_at: new Date().toISOString(),
-    subject,
+    subject: 'Encrypted message',
     isDemoFixture: false,
     status: 'Encrypted & Authenticated',
   };
@@ -707,6 +792,8 @@ export async function decryptEncryptedEnvelope(
   record: EncryptedRecord,
   recipientRsaPrivateKey: CryptoKey | string
 ): Promise<{ plaintext: string; verified: boolean }> {
+  validateEncryptedEnvelope(record);
+
   // 1. Unwrap DEK using RSA private key
   const unwrappedKeyB64 = await unwrapAesKeyWithRsa(record.wrapped_dek_b64, recipientRsaPrivateKey);
 
@@ -723,8 +810,85 @@ export async function decryptEncryptedEnvelope(
   return decrypted;
 }
 
+/** Validates the versioned browser vault envelope before any key operation. */
+export function validateEncryptedEnvelope(value: unknown): asserts value is EncryptedRecord {
+  if (!value || typeof value !== 'object') {
+    throw new Error('Encrypted envelope must be a JSON object.');
+  }
+
+  const record = value as Partial<EncryptedRecord>;
+  const requiredStrings: Array<keyof EncryptedRecord> = [
+    'record_id',
+    'cipher_suite',
+    'key_id',
+    'nonce_b64',
+    'wrapped_dek_b64',
+    'ciphertext_b64',
+    'tag_b64',
+    'created_at',
+    'subject',
+  ];
+
+  for (const field of requiredStrings) {
+    if (typeof record[field] !== 'string' || !record[field]) {
+      throw new Error(`Encrypted envelope is missing a valid ${field} field.`);
+    }
+  }
+
+  if (record.schema_version !== 1) {
+    throw new Error('Unsupported encrypted envelope schema version.');
+  }
+  if (record.cipher_suite !== 'AES-256-GCM + RSA-OAEP-3072') {
+    throw new Error('Unsupported encrypted envelope cipher suite.');
+  }
+  if (!/^rec-[A-Za-z0-9-]{1,96}$/.test(record.record_id!)) {
+    throw new Error('Encrypted envelope record ID is malformed.');
+  }
+  if (!/^rsa-cs-[A-Za-z0-9-]{1,64}$/.test(record.key_id!)) {
+    throw new Error('Encrypted envelope key ID is malformed.');
+  }
+  if (!Number.isFinite(Date.parse(record.created_at!))) {
+    throw new Error('Encrypted envelope creation date is malformed.');
+  }
+
+  const decodeField = (field: 'nonce_b64' | 'wrapped_dek_b64' | 'ciphertext_b64' | 'tag_b64') => {
+    const encoded = record[field]!;
+    if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+      throw new Error(`Encrypted envelope ${field} is not valid Base64.`);
+    }
+
+    let decoded: Uint8Array;
+    try {
+      decoded = base64ToBytes(encoded);
+    } catch {
+      throw new Error(`Encrypted envelope ${field} is not valid Base64.`);
+    }
+    if (bytesToBase64(decoded) !== encoded) {
+      throw new Error(`Encrypted envelope ${field} is not canonical Base64.`);
+    }
+    return decoded;
+  };
+
+  if (decodeField('nonce_b64').byteLength !== 12) {
+    throw new Error('Encrypted envelope nonce must be exactly 12 bytes.');
+  }
+  if (decodeField('wrapped_dek_b64').byteLength !== RSA_3072_CIPHERTEXT_BYTES) {
+    throw new Error('Encrypted envelope must contain a 3072-bit RSA-wrapped DEK.');
+  }
+  if (decodeField('ciphertext_b64').byteLength === 0) {
+    throw new Error('Encrypted envelope ciphertext cannot be empty.');
+  }
+  if (decodeField('tag_b64').byteLength !== 16) {
+    throw new Error('Encrypted envelope authentication tag must be exactly 16 bytes.');
+  }
+
+  if (record.isDemoFixture !== false) {
+    throw new Error('Demo or unsupported records cannot be decrypted as real envelopes.');
+  }
+}
+
 /* =====================================================================
- * 6. SCIKIT-LEARN TF-IDF + LOGISTIC REGRESSION INFERENCE ENGINE
+ * 6. CUSTOM TYPESCRIPT TF-IDF-STYLE FEATURE EXTRACTION & LOGISTIC REGRESSION INFERENCE
  * ===================================================================== */
 
 export interface PhishingIndicator {
@@ -744,10 +908,20 @@ export interface PhishingAnalysis {
   latencyMs: number;
 }
 
+export interface FeatureExtractionResult {
+  tokens: string[];
+  termFrequencies: Record<string, number>;
+  matchedFeatures: Array<{ token: string; idx: number; val: number; normalizedVal: number }>;
+  norm: number;
+}
+
 /**
- * Tokenizes text into lowercase unigrams and bigrams matching Scikit-Learn TfidfVectorizer.
+ * Custom TypeScript tokenization for in-browser feature processing.
+ * Tokenizes text into lowercase word unigrams and adjacent bigrams.
+ * Note: Feature extraction is implemented entirely in custom TypeScript;
+ * no Scikit-learn or Python runtime executes in the application.
  */
-function tokenizeText(text: string): string[] {
+export function tokenizeText(text: string): string[] {
   const clean = text.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
   const words = clean.split(/\s+/).filter((w) => w.length > 1);
   const tokens: string[] = [...words];
@@ -758,27 +932,11 @@ function tokenizeText(text: string): string[] {
 }
 
 /**
- * Real TF-IDF feature extraction + Logistic Regression classification.
- * Formula: P(Phishing) = 1 / (1 + e^-(w^T x + b))
+ * Custom TypeScript vectorizer: extracts TF-IDF-style feature representations
+ * directly in the browser from input text using stored model vocabulary and IDF weights.
  */
-export function analyzeMessageForPhishing(text: string): PhishingAnalysis {
-  const startTime = performance.now();
-  if (!text || !text.trim()) {
-    return {
-      riskScore: 0,
-      riskBand: 'Lower detected risk',
-      modelVersion: PHISHING_MODEL.modelVersion,
-      modelStatus: 'Loaded & Verified (Offline In-Memory)',
-      indicators: [],
-      explanation: 'Empty message text provided. No threat indicators detected.',
-      recommendations: ['Provide email or message text to perform security evaluation.'],
-      latencyMs: 0.1,
-    };
-  }
-
+export function extractTfidfFeatures(text: string): FeatureExtractionResult {
   const tokens = tokenizeText(text);
-
-  // 1. Calculate Term Frequency
   const tf: Record<string, number> = {};
   for (const t of tokens) {
     if (PHISHING_MODEL.vocabulary[t] !== undefined) {
@@ -787,31 +945,67 @@ export function analyzeMessageForPhishing(text: string): PhishingAnalysis {
   }
 
   const matchedEntries = Object.entries(tf);
+  let normSq = 0;
+  const rawWeighted: Array<{ token: string; idx: number; val: number }> = [];
+
+  for (const [t, count] of matchedEntries) {
+    const idx = PHISHING_MODEL.vocabulary[t];
+    const sublinearTf = 1 + Math.log(count);
+    const idfVal = PHISHING_MODEL.idf[idx];
+    const val = sublinearTf * idfVal;
+    normSq += val * val;
+    rawWeighted.push({ token: t, idx, val });
+  }
+
+  const norm = Math.sqrt(normSq) || 1;
+  const matchedFeatures = rawWeighted.map((item) => ({
+    ...item,
+    normalizedVal: item.val / norm,
+  }));
+
+  return {
+    tokens,
+    termFrequencies: tf,
+    matchedFeatures,
+    norm,
+  };
+}
+
+/**
+ * In-browser feature extraction and Logistic Regression inference.
+ * - Custom TypeScript TF-IDF-style feature extraction (sublinear TF, IDF lookup, and L2 normalization).
+ * - In-browser feature processing using bundled vocabulary and IDF vectors.
+ * - Logistic Regression inference using stored model coefficients and intercept:
+ *   logit = b + sum(w_i * x_i)
+ *   P(Phishing) = 1 / (1 + e^-logit)
+ *
+ * No external API, Python backend, or Scikit-learn runtime is executed.
+ */
+export function analyzeMessageForPhishing(text: string): PhishingAnalysis {
+  const startTime = performance.now();
+  if (!text || !text.trim()) {
+    return {
+      riskScore: 0,
+      riskBand: 'Lower detected risk',
+      modelVersion: PHISHING_MODEL.modelVersion,
+      modelStatus: 'Loaded (Local In-Memory)',
+      indicators: [],
+      explanation: 'Empty message text provided. No threat indicators detected.',
+      recommendations: ['Provide email or message text to perform security evaluation.'],
+      latencyMs: 0.1,
+    };
+  }
+
+  const { matchedFeatures } = extractTfidfFeatures(text);
+
   let logit = PHISHING_MODEL.intercept;
   const indicators: PhishingIndicator[] = [];
 
-  if (matchedEntries.length > 0) {
-    // 2. Sublinear TF and IDF weighting: val = (1 + ln(count)) * IDF
-    let normSq = 0;
-    const weighted: Array<{ token: string; idx: number; val: number }> = [];
-
-    for (const [t, count] of matchedEntries) {
-      const idx = PHISHING_MODEL.vocabulary[t];
-      const sublinearTf = 1 + Math.log(count);
-      const idfVal = PHISHING_MODEL.idf[idx];
-      const val = sublinearTf * idfVal;
-      normSq += val * val;
-      weighted.push({ token: t, idx, val });
-    }
-
-    // 3. L2 Normalization
-    const norm = Math.sqrt(normSq) || 1;
-
-    // 4. Dot product with Logistic Regression weights
-    for (const item of weighted) {
-      const x = item.val / norm;
+  if (matchedFeatures.length > 0) {
+    // Dot product with Logistic Regression weights
+    for (const item of matchedFeatures) {
       const coef = PHISHING_MODEL.coefficients[item.idx];
-      const contribution = x * coef;
+      const contribution = item.normalizedVal * coef;
       logit += contribution;
 
       if (contribution > 0.04) {
@@ -828,7 +1022,7 @@ export function analyzeMessageForPhishing(text: string): PhishingAnalysis {
   const probability = 1 / (1 + Math.exp(-logit));
   const roundedScore = Math.round(probability * 1000) / 1000;
 
-  // 6. Calibrated Decision Bands (Report Section 8.3 & 8.7)
+  // 6. Fixed advisory score bands; the score is not calibrated as a probability.
   let riskBand: 'Lower detected risk' | 'Review recommended' | 'High phishing risk';
   if (roundedScore < 0.35) {
     riskBand = 'Lower detected risk';
@@ -848,7 +1042,7 @@ export function analyzeMessageForPhishing(text: string): PhishingAnalysis {
     explanation = `The logistic regression model detected significant indicative tokens (${indicators.slice(0, 3).map((i) => `"${i.token}"`).join(', ')}). Classification indicates strong urgency or credential solicitation.`;
     recommendations.push('Do not follow embedded links or enter credentials on external landing pages.');
     recommendations.push('Do not download or open unsolicited attachments.');
-    recommendations.push('Secure and archive this dispatch into the encrypted vault for evidence preservation.');
+    recommendations.push('Encrypt this dispatch before adding it to the current tab’s session-only vault.');
   } else if (riskBand === 'Review recommended') {
     explanation = 'The message contains moderate urgency or transactional signals. Manual human review is recommended before taking action.';
     recommendations.push('Confirm sender identity through a secondary, out-of-band communication channel.');
@@ -870,487 +1064,4 @@ export function analyzeMessageForPhishing(text: string): PhishingAnalysis {
     recommendations,
     latencyMs: Math.max(latencyMs, 0.1),
   };
-}
-
-/* =====================================================================
- * 7. REAL AUTOMATED TEST RUNNER (COVERS REPORT TEST CASES T-01 to T-22)
- * ===================================================================== */
-
-/**
- * Dynamically executes tests against actual implementations and returns real measured results.
- */
-export async function executeSecurityTestSuite(): Promise<TestCase[]> {
-  const results: TestCase[] = [];
-
-  // T-01: Caesar round-trip
-  {
-    const t0 = performance.now();
-    const original = 'ATTACK AT DAWN';
-    const encrypted = caesarEncrypt(original, 7);
-    const decrypted = caesarDecrypt(encrypted, 7);
-    const passed = decrypted === original;
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-01',
-      area: 'Caesar Cipher',
-      action: 'Encrypt sample string with shift 7, then decrypt with shift 7',
-      expected: 'Recovered plaintext exactly matches original',
-      status: passed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: `Round-trip: "${original}" -> "${encrypted}" -> "${decrypted}" (Verified)`,
-    });
-  }
-
-  // T-02: Caesar invalid key
-  {
-    const t0 = performance.now();
-    let errorCaught = false;
-    try {
-      caesarEncrypt('SAMPLE', NaN);
-    } catch {
-      errorCaught = true;
-    }
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-02',
-      area: 'Caesar Cipher',
-      action: 'Submit shift value outside permitted bounds (NaN)',
-      expected: 'Validation error raised; application does not crash',
-      status: errorCaught ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: 'Rejected with validation exception: "Caesar shift must be a valid integer."',
-    });
-  }
-
-  // T-03: Vigenère round-trip
-  {
-    const t0 = performance.now();
-    const original = 'CRYPTOGRAPHY';
-    const encrypted = vigenereEncrypt(original, 'KEY');
-    const decrypted = vigenereDecrypt(encrypted, 'KEY');
-    const passed = decrypted === original;
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-03',
-      area: 'Vigenère Cipher',
-      action: 'Encrypt with keyword "KEY", then decrypt with matching keyword',
-      expected: 'Plaintext recovered without corruption',
-      status: passed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: `Vigenère round-trip verified: "${original}" -> "${encrypted}" -> "${decrypted}"`,
-    });
-  }
-
-  // T-04: Vigenère invalid keyword
-  {
-    const t0 = performance.now();
-    let errorCaught = false;
-    try {
-      vigenereEncrypt('TEXT', '12345!@#');
-    } catch {
-      errorCaught = true;
-    }
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-04',
-      area: 'Vigenère Cipher',
-      action: 'Submit keyword with non-alphabetic characters only',
-      expected: 'Rejected with validation error message',
-      status: errorCaught ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: 'Input validation rejected non-alphabetic keyword safely.',
-    });
-  }
-
-  // T-05: AES round-trip with correct key
-  let sampleKeyB64 = '';
-  let sampleCiphertextB64 = '';
-  let sampleTagB64 = '';
-  let sampleNonceB64 = '';
-  {
-    const t0 = performance.now();
-    const message = 'TOP_SECRET_MISSION_DISPATCH_2026';
-    const enc = await aesGcmEncrypt(message);
-    sampleKeyB64 = enc.keyB64;
-    sampleCiphertextB64 = enc.ciphertextB64;
-    sampleTagB64 = enc.tagB64;
-    sampleNonceB64 = enc.nonceB64;
-
-    const dec = await aesGcmDecrypt(enc.ciphertextB64, enc.tagB64, enc.keyB64, enc.nonceB64);
-    const passed = dec.plaintext === message && dec.verified;
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-05',
-      area: 'AES-256-GCM',
-      action: 'Encrypt 256-bit AES payload, then decrypt with identical key',
-      expected: 'Plaintext recovered, tag verified',
-      status: passed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: `AES-GCM Web Crypto authenticated round-trip verified. Tag: ${enc.tagB64.substring(0, 12)}...`,
-    });
-  }
-
-  // T-06: AES decryption with incorrect key (Fails closed)
-  {
-    const t0 = performance.now();
-    const wrongKey = generateRandomAesKey().keyB64;
-    let failClosed = false;
-    try {
-      await aesGcmDecrypt(sampleCiphertextB64, sampleTagB64, wrongKey, sampleNonceB64);
-    } catch {
-      failClosed = true;
-    }
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-06',
-      area: 'AES-256-GCM',
-      action: 'Attempt decryption of genuine ciphertext with wrong 256-bit key',
-      expected: 'Fail closed: Decryption rejected, no plaintext leaked',
-      status: failClosed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: 'Web Crypto subtle.decrypt failed closed with authentication error as required.',
-    });
-  }
-
-  // T-07: AES ciphertext tampering
-  {
-    const t0 = performance.now();
-    const rawBytes = base64ToBytes(sampleCiphertextB64);
-    rawBytes[0] ^= 0x01; // Tamper single bit
-    const tamperedCiphertext = bytesToBase64(rawBytes);
-
-    let failClosed = false;
-    try {
-      await aesGcmDecrypt(tamperedCiphertext, sampleTagB64, sampleKeyB64, sampleNonceB64);
-    } catch {
-      failClosed = true;
-    }
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-07',
-      area: 'AES-256-GCM',
-      action: 'Flip 1 bit in ciphertext and attempt authenticated decryption',
-      expected: 'GCM authentication tag mismatch detected; fail closed',
-      status: failClosed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: 'Authentication tag mismatch detected tamper in bit 0 of ciphertext.',
-    });
-  }
-
-  // T-08: AES authentication tag tampering
-  {
-    const t0 = performance.now();
-    const tagBytes = base64ToBytes(sampleTagB64);
-    tagBytes[tagBytes.length - 1] ^= 0x01; // Tamper tag
-    const tamperedTag = bytesToBase64(tagBytes);
-
-    let failClosed = false;
-    try {
-      await aesGcmDecrypt(sampleCiphertextB64, tamperedTag, sampleKeyB64, sampleNonceB64);
-    } catch {
-      failClosed = true;
-    }
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-08',
-      area: 'AES-256-GCM',
-      action: 'Corrupt 1 byte in 128-bit authentication tag',
-      expected: 'Cryptographic integrity failure caught immediately',
-      status: failClosed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: 'GHASH verification failed closed on corrupted tag byte.',
-    });
-  }
-
-  // T-09: Real RSA key generation & DEK wrap/unwrap
-  let rsaKeyA: RsaGeneratedKeyPair | null = null;
-  {
-    const t0 = performance.now();
-    rsaKeyA = await generateRsaKeyPair(3072);
-    const dekToWrap = generateRandomAesKey().keyB64;
-    const wrapped = await wrapAesKeyWithRsa(dekToWrap, rsaKeyA.cryptoPublicKey);
-    const unwrapped = await unwrapAesKeyWithRsa(wrapped, rsaKeyA.cryptoPrivateKey);
-    const passed = unwrapped === dekToWrap;
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-09',
-      area: 'RSA-OAEP',
-      action: 'Generate RSA key pair in Web Crypto, wrap 256-bit AES DEK, unwrap with private key',
-      expected: 'Unwrapped DEK matches original symmetric key exactly',
-      status: passed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: `RSA-OAEP round trip verified with fingerprint ${rsaKeyA.publicKeyFingerprint}.`,
-    });
-  }
-
-  // T-10: RSA unwrap with mismatched private key
-  {
-    const t0 = performance.now();
-    const rsaKeyB = await generateRsaKeyPair(3072);
-    const dek = generateRandomAesKey().keyB64;
-    const wrappedWithA = await wrapAesKeyWithRsa(dek, rsaKeyA!.cryptoPublicKey);
-
-    let rejected = false;
-    try {
-      await unwrapAesKeyWithRsa(wrappedWithA, rsaKeyB.cryptoPrivateKey);
-    } catch {
-      rejected = true;
-    }
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-10',
-      area: 'RSA-OAEP',
-      action: 'Attempt to unwrap DEK using private key B when wrapped with public key A',
-      expected: 'OAEP padding failure; fail closed',
-      status: rejected ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: 'Web Crypto rejected mismatched private key during OAEP decoding.',
-    });
-  }
-
-  // T-11: Full Hybrid Envelope Creation & Decryption
-  {
-    const t0 = performance.now();
-    const plaintext = 'Hybrid Encryption Protocol Verification Payload';
-    const envelope = await createEncryptedEnvelope(plaintext, rsaKeyA!.cryptoPublicKey, rsaKeyA!.keyId);
-    const decrypted = await decryptEncryptedEnvelope(envelope, rsaKeyA!.cryptoPrivateKey);
-    const passed = decrypted.plaintext === plaintext && decrypted.verified;
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-11',
-      area: 'Hybrid Envelope',
-      action: 'Execute complete end-to-end hybrid workflow: AES-256-GCM + RSA-OAEP packaging & unwrap',
-      expected: 'Envelope created, DEK unwrapped, ciphertext authenticated & decrypted',
-      status: passed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: `Record ${envelope.record_id} successfully created and decrypted via Web Crypto.`,
-    });
-  }
-
-  // T-12: SHA-256 known test vector (NIST standard)
-  {
-    const t0 = performance.now();
-    const input = 'The quick brown fox jumps over the lazy dog';
-    const expected = 'd7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592';
-    const digest = await sha256(input);
-    const passed = digest.toLowerCase() === expected.toLowerCase();
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-12',
-      area: 'SHA-256 Hash',
-      action: 'Calculate digest of canonical NIST test string',
-      expected: 'Digest matches NIST published standard value exactly',
-      status: passed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: `Computed: ${digest.substring(0, 24)}... Matches NIST test vector.`,
-    });
-  }
-
-  // T-13: SHA-256 live avalanche effect bit-level verification
-  {
-    const t0 = performance.now();
-    const str1 = 'Message A100';
-    const str2 = 'Message A101'; // 1 bit flip in ASCII character '0' vs '1'
-    const h1 = await sha256(str1);
-    const h2 = await sha256(str2);
-    const { bitsChanged, percentChanged } = computeHexHammingDistance(h1, h2);
-    const passed = percentChanged >= 40 && percentChanged <= 60;
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-13',
-      area: 'SHA-256 Hash',
-      action: 'Flip single bit in input text and measure bit Hamming distance in 256-bit digest',
-      expected: 'Avalanche effect shifts ~45-55% of all output bits',
-      status: passed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: `Live avalanche measured: ${bitsChanged} / 256 bits changed (${percentChanged}% shift).`,
-    });
-  }
-
-  // T-14: Phishing model inference on phishing sample
-  {
-    const t0 = performance.now();
-    const phishingMsg = 'URGENT: Your account has been suspended due to unauthorized login. Click here to verify password immediately.';
-    const analysis = analyzeMessageForPhishing(phishingMsg);
-    const passed = analysis.riskBand === 'High phishing risk' && analysis.indicators.length > 0;
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-14',
-      area: 'AI Phishing',
-      action: 'Evaluate high-urgency credential solicitation message with TF-IDF classifier',
-      expected: 'Classified as "High phishing risk" with extracted threat indicators',
-      status: passed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: `Score: ${(analysis.riskScore * 100).toFixed(1)}%, Band: "${analysis.riskBand}", Top token: "${analysis.indicators[0]?.token || 'none'}"`,
-    });
-  }
-
-  // T-15: Phishing model inference on legitimate message
-  {
-    const t0 = performance.now();
-    const benignMsg = 'Team meeting agenda for Thursday afternoon at 2 PM. Please review attached slides.';
-    const analysis = analyzeMessageForPhishing(benignMsg);
-    const passed = analysis.riskBand === 'Lower detected risk';
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-15',
-      area: 'AI Phishing',
-      action: 'Evaluate typical internal corporate agenda message with TF-IDF classifier',
-      expected: 'Classified as "Lower detected risk" without false alarm',
-      status: passed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: `Score: ${(analysis.riskScore * 100).toFixed(1)}%, Band: "${analysis.riskBand}" (Zero false alarms)`,
-    });
-  }
-
-  // T-16: Empty input rejection
-  {
-    const t0 = performance.now();
-    let errorCaught = false;
-    try {
-      await aesGcmEncrypt('');
-    } catch {
-      errorCaught = true;
-    }
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-16',
-      area: 'Input Validation',
-      action: 'Submit empty plaintext string to encryption engine',
-      expected: 'Caught gracefully by validation logic without uncaught error',
-      status: 'Passed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: 'Handled safely with input validation boundary check.',
-    });
-  }
-
-  // T-17: Nonce non-reuse verification
-  {
-    const t0 = performance.now();
-    const enc1 = await aesGcmEncrypt('MESSAGE_A');
-    const enc2 = await aesGcmEncrypt('MESSAGE_A');
-    const passed = enc1.nonceB64 !== enc2.nonceB64 && enc1.ciphertextB64 !== enc2.ciphertextB64;
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-17',
-      area: 'AES-256-GCM',
-      action: 'Encrypt identical plaintext twice and verify nonce uniqueness',
-      expected: 'Fresh 96-bit nonce generated per operation; ciphertexts differ (non-deterministic)',
-      status: passed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: `Nonce 1 (${enc1.nonceB64.substring(0, 8)}...) !== Nonce 2 (${enc2.nonceB64.substring(0, 8)}...)`,
-    });
-  }
-
-  // T-18: Vault tamper simulation rejection
-  {
-    const t0 = performance.now();
-    const plaintext = 'Secret Vault Item for Tamper Test';
-    const env = await createEncryptedEnvelope(plaintext, rsaKeyA!.cryptoPublicKey, rsaKeyA!.keyId);
-    
-    // Corrupt ciphertext
-    const rawCipher = base64ToBytes(env.ciphertext_b64);
-    rawCipher[0] ^= 0xff;
-    const tamperedEnv: EncryptedRecord = {
-      ...env,
-      ciphertext_b64: bytesToBase64(rawCipher),
-      status: 'Tampered (Simulated)',
-    };
-
-    let failClosed = false;
-    try {
-      await decryptEncryptedEnvelope(tamperedEnv, rsaKeyA!.cryptoPrivateKey);
-    } catch {
-      failClosed = true;
-    }
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-18',
-      area: 'Secure Vault',
-      action: 'Attempt decryption of tampered vault envelope',
-      expected: 'Cryptographic authentication fails closed; plaintext remains sealed',
-      status: failClosed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: 'Vault decryption failed closed with authentication error on modified envelope.',
-    });
-  }
-
-  // T-19: Key fingerprint calculation consistency
-  {
-    const t0 = performance.now();
-    const key = await generateRsaKeyPair(3072);
-    const fpValid = key.publicKeyFingerprint.startsWith('SHA256:') && key.publicKeyFingerprint.length === 39;
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-19',
-      area: 'Key Management',
-      action: 'Generate RSA key and verify SHA-256 public key fingerprint derivation',
-      expected: 'Valid SHA-256 fingerprint generated over raw SPKI structure',
-      status: fpValid ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: `Generated valid fingerprint: ${key.publicKeyFingerprint}`,
-    });
-  }
-
-  // T-20: Classical cipher case preservation
-  {
-    const t0 = performance.now();
-    const mixed = 'Hello, World! 123';
-    const enc = caesarEncrypt(mixed, 3);
-    const dec = caesarDecrypt(enc, 3);
-    const passed = dec === mixed && enc === 'Khoor, Zruog! 123';
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-20',
-      area: 'Classical Ciphers',
-      action: 'Verify preservation of mixed casing, punctuation, and digits during classical shifts',
-      expected: 'Letters shifted correctly; symbols and casing preserved intact',
-      status: passed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: `Casing test: "${mixed}" -> "${enc}" -> "${dec}" (Verified)`,
-    });
-  }
-
-  // T-21: AES Authenticated Additional Data (AAD) binding
-  {
-    const t0 = performance.now();
-    const key = generateRandomAesKey().keyB64;
-    const enc = await aesGcmEncrypt('SENSITIVE_DATA', key, undefined, 'record_id=001');
-
-    // Attempt decrypt with different AAD
-    let aadFailed = false;
-    try {
-      await aesGcmDecrypt(enc.ciphertextB64, enc.tagB64, key, enc.nonceB64, 'record_id=002');
-    } catch {
-      aadFailed = true;
-    }
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-21',
-      area: 'AES-256-GCM',
-      action: 'Verify GHASH AAD binding: encrypt with AAD A, decrypt with AAD B',
-      expected: 'Decryption fails closed when AAD metadata is modified',
-      status: aadFailed ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: 'Mismatched AAD string caused immediate GHASH tag authentication failure.',
-    });
-  }
-
-  // T-22: Full security suite integration latency
-  {
-    const t0 = performance.now();
-    const totalDuration = results.reduce((acc, r) => acc + r.duration_ms, 0);
-    const dur = Math.round((performance.now() - t0) * 10) / 10;
-    results.push({
-      id: 'T-22',
-      area: 'System Performance',
-      action: 'Measure cumulative execution duration across all cryptographic test suites',
-      expected: 'All cryptographic and AI test operations complete locally in under 3000 ms',
-      status: totalDuration < 3000 ? 'Passed' : 'Failed',
-      duration_ms: Math.max(dur, 0.1),
-      evidence: `All suites completed in ${totalDuration.toFixed(1)} ms in WebAssembly/Web Crypto runtime.`,
-    });
-  }
-
-  return results;
 }

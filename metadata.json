@@ -1,6 +1,6 @@
 {
-  "name": "CipherSentinel — AI-Assisted Secure Message Protection System",
-  "description": "AI-Assisted Secure Message Protection System combining cryptographic algorithms, AI-powered phishing detection, message protection, and data integrity verification in a unified interface.",
+  "name": "CipherSentinel — Frontend-only Security Web Application",
+  "description": "React, TypeScript, and Vite browser application demonstrating classical and modern cryptography, local advisory phishing analysis, and session-only encrypted envelopes with the Web Crypto API.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

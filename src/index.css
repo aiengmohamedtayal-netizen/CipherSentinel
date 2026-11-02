@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./assets/fonts/fonts.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -6,6 +7,11 @@
   :root {
     --font-serif: 'Fraunces', 'Newsreader', serif;
     --font-sans: 'Plus Jakarta Sans', sans-serif;
+  }
+
+  html[lang='ar'] {
+    --font-serif: 'Thmanyah Serif Display', 'Thmanyah Serif Text', serif;
+    --font-sans: 'Thmanyah Sans', sans-serif;
   }
 
   body {
@@ -34,6 +40,24 @@
 
 .font-sans-clean {
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+html[lang='ar'] .font-display,
+html[lang='ar'] .font-serif-display {
+  font-family: 'Thmanyah Serif Display', 'Thmanyah Serif Text', serif;
+}
+
+html[lang='ar'] .font-sans-clean {
+  font-family: 'Thmanyah Sans', sans-serif;
+}
+
+[dir='rtl'] .rtl-mirror {
+  transform: scaleX(-1);
+}
+
+bdi,
+[data-bidi-isolate] {
+  unicode-bidi: isolate;
 }
 
 /* Glassmorphism helpers matching requested spec */

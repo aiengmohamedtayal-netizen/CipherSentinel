@@ -1,3 +1,4 @@
+import { useLanguage } from '../../context/LanguageContext';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useSessionActivity } from '../../context/SessionContext';
 import {
+  validateCaesarShift,
   caesarEncrypt,
   caesarDecrypt,
   vigenereEncrypt,
@@ -106,6 +108,7 @@ const SAMPLE_INPUTS = [
 ];
 
 export const CryptoLabPage: React.FC = () => {
+  const { t, formatNumber, localizeError } = useLanguage();
   const {
     activeAesKeyB64,
     setActiveAesKeyB64,
@@ -123,7 +126,7 @@ export const CryptoLabPage: React.FC = () => {
   const [operationMode, setOperationMode] = useState<string>('encrypt'); // encrypt | decrypt | hash | verify | wrap | unwrap
 
   // Dynamic Keys State
-  const [caesarShift, setCaesarShift] = useState<number>(7);
+  const [caesarShift, setCaesarShift] = useState<number | string>(7);
   const [vigenereKey, setVigenereKey] = useState<string>('SENTINEL');
   const [aesKeyInput, setAesKeyInput] = useState<string>('');
   const [gcmNonceInput, setGcmNonceInput] = useState<string>('');
@@ -186,18 +189,16 @@ export const CryptoLabPage: React.FC = () => {
       }
 
       if (currentAlgo.id === 'caesar') {
-        if (typeof caesarShift !== 'number' || isNaN(caesarShift)) {
-          throw new Error('Caesar shift key must be a valid integer.');
-        }
+        const validatedShift = validateCaesarShift(caesarShift);
         if (operationMode === 'encrypt') {
-          const res = caesarEncrypt(inputText, caesarShift);
+          const res = caesarEncrypt(inputText, validatedShift);
           setOutputText(res);
-          setStatusMessage(`Caesar encrypted successfully with shift k=${caesarShift}.`);
+          setStatusMessage(`Caesar encrypted successfully with shift k=${validatedShift}.`);
         } else {
           const target = outputText || inputText;
-          const res = caesarDecrypt(target, caesarShift);
+          const res = caesarDecrypt(target, validatedShift);
           setOutputText(res);
-          setStatusMessage(`Caesar decrypted successfully with shift k=-${caesarShift}.`);
+          setStatusMessage(`Caesar decrypted successfully with shift k=-${validatedShift}.`);
         }
       } else if (currentAlgo.id === 'vigenere') {
         if (!vigenereKey.trim() || !/^[A-Za-z]+$/.test(vigenereKey.trim())) {
@@ -219,7 +220,7 @@ export const CryptoLabPage: React.FC = () => {
 
         if (operationMode === 'encrypt') {
           // Nonce generation: fresh 96-bit nonce for each encryption!
-          const result = await aesGcmEncrypt(inputText, key, gcmNonceInput.trim() || undefined, aadInput.trim() || undefined);
+          const result = await aesGcmEncrypt(inputText, key, aadInput.trim() || undefined);
           setOutputText(result.ciphertextB64);
           setAuthTagInput(result.tagB64);
           setGcmNonceInput(result.nonceB64);
@@ -329,18 +330,14 @@ export const CryptoLabPage: React.FC = () => {
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono uppercase tracking-wider bg-[#1F2B1D]/10 dark:bg-white/10 text-[#1F2B1D] dark:text-[#F4EFE6]">
-              Interactive GUI Workspace
-            </span>
+              {t("Interactive GUI Workspace")}</span>
             <span className="text-xs font-mono text-[#657351] dark:text-[#A3B59E]">
-              Web Crypto API Native
-            </span>
+              {t("Web Crypto API Native")}</span>
           </div>
           <h1 className="font-display text-3xl sm:text-4xl text-[#1F2B1D] dark:text-[#F4EFE6] font-normal tracking-tight">
-            Cryptographic Operations Laboratory
-          </h1>
+            {t("Cryptographic Operations Laboratory")}</h1>
           <p className="text-sm sm:text-base text-[#4A5D44] dark:text-[#CBD7C7] font-light max-w-2xl">
-            Select an algorithm, provide parameters, and execute genuine client-side encryption, authenticated decryption, key wrapping, and hashing operations.
-          </p>
+            {t("Select an algorithm, provide parameters, and execute genuine client-side encryption, authenticated decryption, key wrapping, and hashing operations.")}</p>
         </div>
 
         <button
@@ -349,16 +346,15 @@ export const CryptoLabPage: React.FC = () => {
           className="px-4 py-2.5 rounded-full text-xs font-medium bg-[#1F2B1D] dark:bg-[#384E36] text-white hover:bg-[#2c402a] transition-all flex items-center gap-2 shadow-xs cursor-pointer self-start md:self-end"
         >
           <Layers className="w-3.5 h-3.5" />
-          <span>Launch Hybrid Workflow</span>
-          <ArrowRight className="w-3 h-3" />
+          <span>{t("Launch Hybrid Workflow")}</span>
+          <ArrowRight className="w-3 h-3 rtl-mirror" />
         </button>
       </div>
 
       {/* Algorithm Selector Grid */}
       <div className="space-y-3">
         <label className="block text-xs font-semibold uppercase tracking-wider text-[#657351] dark:text-[#A3B59E]">
-          1. Select Cryptographic Algorithm
-        </label>
+          {t("1. Select Cryptographic Algorithm")}</label>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {ALGORITHMS.map((algo) => {
             const Icon = algo.icon;
@@ -368,7 +364,7 @@ export const CryptoLabPage: React.FC = () => {
                 key={algo.id}
                 type="button"
                 onClick={() => handleSelectAlgorithm(algo.id)}
-                className={`p-3.5 sm:p-4 rounded-2xl text-left border transition-all cursor-pointer flex flex-col justify-between ${
+                className={`p-3.5 sm:p-4 rounded-2xl text-start border transition-all cursor-pointer flex flex-col justify-between ${
                   isSelected
                     ? 'border-[#1F2B1D] dark:border-[#CBD7C7] bg-[#1F2B1D] text-white dark:bg-[#273B25] shadow-md scale-[1.01]'
                     : 'border-[#243324]/15 dark:border-white/10 bg-white dark:bg-[#1A2619] text-[#1F2B1D] dark:text-[#F4EFE6] hover:border-[#1F2B1D]/40'
@@ -391,17 +387,17 @@ export const CryptoLabPage: React.FC = () => {
                         : 'bg-[#243324]/5 dark:bg-white/5 text-[#657351] dark:text-[#A3B59E]'
                     }`}
                   >
-                    {algo.category.split(' ')[0]}
+                    {t(algo.category)}
                   </span>
                 </div>
                 <div>
-                  <h3 className="font-display text-base font-medium leading-tight">{algo.name}</h3>
+                  <h3 className="font-display text-base font-medium leading-tight">{t(algo.name)}</h3>
                   <p
                     className={`text-[11px] font-mono mt-1 ${
                       isSelected ? 'text-white/80' : 'text-[#657351] dark:text-[#A3B59E]'
                     }`}
                   >
-                    {algo.standard}
+                    {t(algo.standard)}
                   </p>
                 </div>
               </button>
@@ -415,8 +411,7 @@ export const CryptoLabPage: React.FC = () => {
         <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 flex items-start gap-3 text-xs leading-relaxed">
           <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
           <div>
-            <strong>Educational Only:</strong> {currentAlgo.name} is a historical cipher vulnerable to frequency analysis and brute-force key search. Not suitable for modern confidential communication.
-          </div>
+            <strong>{t("Educational Only:")}</strong> {t('{{algorithm}} is a historical cipher vulnerable to frequency analysis and brute-force key search. Not suitable for modern confidential communication.', { algorithm: t(currentAlgo.name) })}</div>
         </div>
       )}
 
@@ -427,8 +422,7 @@ export const CryptoLabPage: React.FC = () => {
           {/* Operation Selector Tabs */}
           <div className="space-y-2">
             <label className="block text-xs font-semibold uppercase tracking-wider text-[#657351] dark:text-[#A3B59E]">
-              2. Select Operation
-            </label>
+              {t("2. Select Operation")}</label>
             <div className="flex flex-wrap gap-2 p-1.5 rounded-xl bg-[#F5F2EB] dark:bg-[#1A2619] border border-[#243324]/10 dark:border-white/10 w-fit">
               {currentAlgo.id !== 'sha-256' && currentAlgo.id !== 'rsa-oaep' && (
                 <>
@@ -444,8 +438,7 @@ export const CryptoLabPage: React.FC = () => {
                         : 'text-[#4A5D44] dark:text-[#CBD7C7] hover:bg-black/5 dark:hover:bg-white/5'
                     }`}
                   >
-                    Encrypt Message
-                  </button>
+                    {t("Encrypt Message")}</button>
                   <button
                     type="button"
                     onClick={() => {
@@ -458,8 +451,7 @@ export const CryptoLabPage: React.FC = () => {
                         : 'text-[#4A5D44] dark:text-[#CBD7C7] hover:bg-black/5 dark:hover:bg-white/5'
                     }`}
                   >
-                    Decrypt Message
-                  </button>
+                    {t("Decrypt Message")}</button>
                 </>
               )}
 
@@ -477,8 +469,7 @@ export const CryptoLabPage: React.FC = () => {
                         : 'text-[#4A5D44] dark:text-[#CBD7C7] hover:bg-black/5 dark:hover:bg-white/5'
                     }`}
                   >
-                    Wrap AES DEK
-                  </button>
+                    {t("Wrap AES DEK")}</button>
                   <button
                     type="button"
                     onClick={() => {
@@ -491,8 +482,7 @@ export const CryptoLabPage: React.FC = () => {
                         : 'text-[#4A5D44] dark:text-[#CBD7C7] hover:bg-black/5 dark:hover:bg-white/5'
                     }`}
                   >
-                    Unwrap AES DEK
-                  </button>
+                    {t("Unwrap AES DEK")}</button>
                 </>
               )}
 
@@ -510,8 +500,7 @@ export const CryptoLabPage: React.FC = () => {
                         : 'text-[#4A5D44] dark:text-[#CBD7C7] hover:bg-black/5 dark:hover:bg-white/5'
                     }`}
                   >
-                    Generate Hash
-                  </button>
+                    {t("Generate Hash")}</button>
                   <button
                     type="button"
                     onClick={() => {
@@ -524,8 +513,7 @@ export const CryptoLabPage: React.FC = () => {
                         : 'text-[#4A5D44] dark:text-[#CBD7C7] hover:bg-black/5 dark:hover:bg-white/5'
                     }`}
                   >
-                    Verify Against Expected
-                  </button>
+                    {t("Verify Against Expected")}</button>
                 </>
               )}
             </div>
@@ -535,19 +523,16 @@ export const CryptoLabPage: React.FC = () => {
           <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#1A2619] border border-[#243324]/10 dark:border-white/10 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold uppercase tracking-wider text-[#1F2B1D] dark:text-[#F4EFE6]">
-                3. Input Message / Payload
-              </label>
+                {t("3. Input Message / Payload")}</label>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E]">
-                  {inputText.length} chars
-                </span>
+                  {formatNumber(inputText.length)} {t("chars")}</span>
                 <button
                   type="button"
                   onClick={() => setInputText('')}
                   className="text-[11px] text-[#657351] hover:text-[#1F2B1D] dark:text-[#A3B59E] dark:hover:text-[#F4EFE6] underline cursor-pointer"
                 >
-                  Clear
-                </button>
+                  {t("Clear")}</button>
               </div>
             </div>
 
@@ -555,13 +540,14 @@ export const CryptoLabPage: React.FC = () => {
               rows={4}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder="Enter message text, ciphertext string, or DEK to process..."
+              placeholder={t("Enter message text, ciphertext string, or DEK to process...")}
+              dir="auto"
               className="w-full p-3.5 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6] leading-relaxed resize-y"
             />
 
             {/* Quick Sample Input Buttons */}
             <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E]">Samples:</span>
+              <span className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E]">{t("Samples:")}</span>
               {SAMPLE_INPUTS.map((s, idx) => (
                 <button
                   key={idx}
@@ -569,7 +555,7 @@ export const CryptoLabPage: React.FC = () => {
                   onClick={() => setInputText(s.text)}
                   className="px-2.5 py-1 rounded-lg text-[11px] font-mono bg-[#F5F2EB] dark:bg-[#233522] text-[#1F2B1D] dark:text-[#CBD7C7] hover:bg-[#eae5da] cursor-pointer transition-colors"
                 >
-                  {s.label}
+                  {t(s.label)}
                 </button>
               ))}
             </div>
@@ -578,9 +564,9 @@ export const CryptoLabPage: React.FC = () => {
           {/* Algorithm-Specific Dynamic Key Controls */}
           <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#1A2619] border border-[#243324]/10 dark:border-white/10 shadow-xs space-y-4">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-[#1F2B1D] dark:text-[#F4EFE6] flex items-center justify-between">
-              <span>4. Algorithm Parameters & Key Controls</span>
+              <span>{t("4. Algorithm Parameters & Key Controls")}</span>
               <span className="text-[10px] font-mono text-[#657351] dark:text-[#A3B59E]">
-                {currentAlgo.name}
+                {t(currentAlgo.name)}
               </span>
             </h4>
 
@@ -589,18 +575,42 @@ export const CryptoLabPage: React.FC = () => {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-[#4A5D44] dark:text-[#CBD7C7]">
-                    Shift Key (k): <span className="font-mono font-bold text-[#1F2B1D] dark:text-[#F4EFE6]">{caesarShift}</span>
+                    {t("Shift Key (k):")}{typeof caesarShift === 'number' && Number.isFinite(caesarShift) ? (
+                      <span className="font-mono font-bold text-[#1F2B1D] dark:text-[#F4EFE6] ml-1.5 rtl:mr-1.5" dir="ltr">
+                        <bdi>{formatNumber(caesarShift)}</bdi>
+                      </span>
+                    ) : (
+                      <span className="font-mono font-bold text-[#1F2B1D] dark:text-[#F4EFE6] ml-1.5 rtl:mr-1.5" dir="ltr">
+                        <bdi>{String(caesarShift)}</bdi>
+                      </span>
+                    )}
                   </label>
-                  <span className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E]">1 to 25</span>
+                  <span className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E]">{t("1 to 25")}</span>
                 </div>
-                <input
-                  type="range"
-                  min={1}
-                  max={25}
-                  value={caesarShift}
-                  onChange={(e) => setCaesarShift(parseInt(e.target.value, 10))}
-                  className="w-full accent-[#1F2B1D] dark:accent-[#A3B59E] cursor-pointer"
-                />
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={1}
+                    max={25}
+                    value={
+                      typeof caesarShift === 'number' && Number.isInteger(caesarShift) && caesarShift >= 1 && caesarShift <= 25
+                        ? caesarShift
+                        : typeof caesarShift === 'string' && /^-?\d+$/.test(caesarShift.trim()) && Number(caesarShift.trim()) >= 1 && Number(caesarShift.trim()) <= 25
+                          ? Number(caesarShift.trim())
+                          : 7
+                    }
+                    onChange={(e) => setCaesarShift(Number(e.target.value))}
+                    className="flex-1 accent-[#1F2B1D] dark:accent-[#A3B59E] cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={caesarShift}
+                    onChange={(e) => setCaesarShift(e.target.value)}
+                    placeholder="7"
+                    aria-label={t("Shift Key (k):")}
+                    className="w-20 px-3 py-1.5 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs sm:text-sm font-mono text-center focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6]"
+                  />
+                </div>
               </div>
             )}
 
@@ -608,13 +618,12 @@ export const CryptoLabPage: React.FC = () => {
             {currentAlgo.id === 'vigenere' && (
               <div className="space-y-2">
                 <label className="text-xs font-medium text-[#4A5D44] dark:text-[#CBD7C7]">
-                  Keyword String (Letters A-Z only):
-                </label>
+                  {t("Keyword String (Letters A-Z only):")}</label>
                 <input
                   type="text"
                   value={vigenereKey}
                   onChange={(e) => setVigenereKey(e.target.value.toUpperCase())}
-                  placeholder="e.g. SENTINEL"
+                  placeholder={t("e.g. SENTINEL")}
                   className="w-full px-4 py-2 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6]"
                 />
               </div>
@@ -627,22 +636,20 @@ export const CryptoLabPage: React.FC = () => {
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-medium text-[#4A5D44] dark:text-[#CBD7C7]">
-                      AES-256 Key (Base64 - 32 bytes):
-                    </label>
+                      {t("AES-256 Key (Base64 - 32 bytes):")}</label>
                     <button
                       type="button"
                       onClick={handleGenerateFreshAesKey}
                       className="text-[11px] font-mono text-[#1F2B1D] dark:text-[#CBD7C7] hover:underline flex items-center gap-1 cursor-pointer"
                     >
                       <RefreshCw className="w-3 h-3" />
-                      Generate New Key
-                    </button>
+                      {t("Generate New Key")}</button>
                   </div>
                   <input
                     type="text"
                     value={aesKeyInput}
                     onChange={(e) => setAesKeyInput(e.target.value)}
-                    placeholder="Base64 256-bit symmetric key..."
+                    placeholder={t("Base64 256-bit symmetric key...")}
                     className="w-full px-3.5 py-2 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6]"
                   />
                 </div>
@@ -651,22 +658,22 @@ export const CryptoLabPage: React.FC = () => {
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-medium text-[#4A5D44] dark:text-[#CBD7C7]">
-                      GCM Nonce / IV (96 bits - 12 bytes):
+                      {t("GCM Nonce / IV (96 bits - 12 bytes):")}{operationMode === 'encrypt' ? t('Freshly generated') : t('for decryption')}
                     </label>
-                    <button
+                    {operationMode === 'decrypt' && <button
                       type="button"
                       onClick={handleGenerateFreshNonce}
                       className="text-[11px] font-mono text-[#1F2B1D] dark:text-[#CBD7C7] hover:underline flex items-center gap-1 cursor-pointer"
                     >
                       <RefreshCw className="w-3 h-3" />
-                      Fresh Nonce
-                    </button>
+                      {t("Fresh Nonce")}</button>}
                   </div>
                   <input
                     type="text"
                     value={gcmNonceInput}
                     onChange={(e) => setGcmNonceInput(e.target.value)}
-                    placeholder="Fresh random nonce per encryption (never reused with same key)..."
+                    readOnly={operationMode === 'encrypt'}
+                    placeholder={t("Fresh random nonce per encryption (never reused with same key)...")}
                     className="w-full px-3.5 py-2 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6]"
                   />
                 </div>
@@ -674,13 +681,12 @@ export const CryptoLabPage: React.FC = () => {
                 {/* 128-bit Authentication Tag */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-[#4A5D44] dark:text-[#CBD7C7]">
-                    Authentication Tag (128 bits - 16 bytes):
-                  </label>
+                    {t("Authentication Tag (128 bits - 16 bytes):")}</label>
                   <input
                     type="text"
                     value={authTagInput}
                     onChange={(e) => setAuthTagInput(e.target.value)}
-                    placeholder="Generated during encryption; verified strictly during authenticated decryption..."
+                    placeholder={t("Generated during encryption; verified strictly during authenticated decryption...")}
                     className="w-full px-3.5 py-2 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6]"
                   />
                 </div>
@@ -688,13 +694,12 @@ export const CryptoLabPage: React.FC = () => {
                 {/* Authenticated Additional Data (AAD) */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-[#4A5D44] dark:text-[#CBD7C7]">
-                    Authenticated Additional Data (AAD metadata):
-                  </label>
+                    {t("Authenticated Additional Data (AAD metadata):")}</label>
                   <input
                     type="text"
                     value={aadInput}
                     onChange={(e) => setAadInput(e.target.value)}
-                    placeholder="Metadata bound into authentication tag..."
+                    placeholder={t("Metadata bound into authentication tag...")}
                     className="w-full px-3.5 py-2 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6]"
                   />
                 </div>
@@ -706,11 +711,11 @@ export const CryptoLabPage: React.FC = () => {
               <div className="space-y-3">
                 <div className="p-3.5 rounded-2xl bg-[#F5F2EB] dark:bg-[#233522] border border-[#243324]/10 dark:border-white/10 text-xs text-[#4A5D44] dark:text-[#CBD7C7] space-y-1.5">
                   <div className="font-semibold text-[#1F2B1D] dark:text-[#F4EFE6] flex items-center justify-between">
-                    <span>Active RSA Key Pair</span>
-                    <span className="font-mono text-[10px]">{activeRsaKey ? activeRsaKey.keyId : 'Generating...'}</span>
+                    <span>{t("Active RSA Key Pair")}</span>
+                    <span className="font-mono text-[10px]" dir="ltr"><bdi>{activeRsaKey ? activeRsaKey.keyId : t('Generating...')}</bdi></span>
                   </div>
                   <p className="font-mono text-[11px] truncate">
-                    {activeRsaKey ? activeRsaKey.publicKeyFingerprint : 'Generating Web Crypto RSA pair...'}
+                    <bdi dir="ltr">{activeRsaKey ? activeRsaKey.publicKeyFingerprint : t('Generating Web Crypto RSA pair...')}</bdi>
                   </p>
                 </div>
 
@@ -721,15 +726,14 @@ export const CryptoLabPage: React.FC = () => {
                     className="px-3 py-1.5 rounded-xl text-xs font-medium bg-[#1F2B1D]/10 dark:bg-white/10 hover:bg-[#1F2B1D]/20 text-[#1F2B1D] dark:text-[#F4EFE6] cursor-pointer flex items-center gap-1.5 transition-colors"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Generate Fresh RSA-3072 Key Pair</span>
+                    <span>{t("Generate Fresh RSA-3072 Key Pair")}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab('keys')}
                     className="px-3 py-1.5 rounded-xl text-xs font-medium text-[#657351] dark:text-[#A3B59E] hover:underline cursor-pointer"
                   >
-                    Manage Keys in Key Manager →
-                  </button>
+                    {t("Manage Keys in Key Manager →")}</button>
                 </div>
               </div>
             )}
@@ -738,19 +742,17 @@ export const CryptoLabPage: React.FC = () => {
             {currentAlgo.id === 'sha-256' && (
               <div className="space-y-3">
                 <div className="p-3.5 rounded-2xl bg-[#F5F2EB] dark:bg-[#233522] border border-[#243324]/10 dark:border-white/10 text-xs text-[#4A5D44] dark:text-[#CBD7C7] space-y-1">
-                  <strong>Unkeyed One-Way Function:</strong> SHA-256 requires no secret key. It transforms arbitrary input into a 256-bit (64 hex characters) digest.
-                </div>
+                  <strong>{t("Unkeyed One-Way Function:")}</strong> {t("SHA-256 requires no secret key. It transforms arbitrary input into a 256-bit (64 hex characters) digest.")}</div>
 
                 {operationMode === 'verify' && (
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-[#4A5D44] dark:text-[#CBD7C7]">
-                      Expected 64-char Hex Digest:
-                    </label>
+                      {t("Expected 64-char Hex Digest:")}</label>
                     <input
                       type="text"
                       value={expectedHashInput}
                       onChange={(e) => setExpectedHashInput(e.target.value)}
-                      placeholder="Paste 64-character expected hash to compare..."
+                      placeholder={t("Paste 64-character expected hash to compare...")}
                       className="w-full px-3.5 py-2 rounded-xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#1F2B1D] dark:focus:ring-[#CBD7C7] text-[#1F2B1D] dark:text-[#F4EFE6]"
                     />
                   </div>
@@ -767,12 +769,12 @@ export const CryptoLabPage: React.FC = () => {
               >
                 <Zap className="w-4 h-4" />
                 <span>
-                  {operationMode === 'encrypt' && `Encrypt with ${currentAlgo.name}`}
-                  {operationMode === 'decrypt' && `Decrypt & Authenticate with ${currentAlgo.name}`}
-                  {operationMode === 'wrap' && 'Wrap AES DEK with RSA-OAEP'}
-                  {operationMode === 'unwrap' && 'Unwrap AES DEK with RSA Private Key'}
-                  {operationMode === 'hash' && 'Generate 256-Bit SHA-256 Digest'}
-                  {operationMode === 'verify' && 'Verify Digest Against Expected Reference'}
+                  {operationMode === 'encrypt' && t('Encrypt with {{algorithm}}', { algorithm: t(currentAlgo.name) })}
+                  {operationMode === 'decrypt' && t('Decrypt & Authenticate with {{algorithm}}', { algorithm: t(currentAlgo.name) })}
+                  {operationMode === 'wrap' && t('Wrap AES DEK with RSA-OAEP')}
+                  {operationMode === 'unwrap' && t('Unwrap AES DEK with RSA Private Key')}
+                  {operationMode === 'hash' && t('Generate 256-Bit SHA-256 Digest')}
+                  {operationMode === 'verify' && t('Verify Digest Against Expected Reference')}
                 </span>
               </button>
             </div>
@@ -787,13 +789,11 @@ export const CryptoLabPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Terminal className="w-4 h-4 text-[#1F2B1D] dark:text-[#CBD7C7]" />
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-[#1F2B1D] dark:text-[#F4EFE6]">
-                  Cryptographic Output
-                </h4>
+                  {t("Cryptographic Output")}</h4>
               </div>
               {lastOpDurationMs !== null && (
                 <span className="text-[10px] font-mono text-[#657351] dark:text-[#A3B59E]">
-                  Execution: {lastOpDurationMs} ms
-                </span>
+                  {t("Execution:")}{formatNumber(lastOpDurationMs)} {t("ms")}</span>
               )}
             </div>
 
@@ -801,8 +801,8 @@ export const CryptoLabPage: React.FC = () => {
             <div className="relative min-h-[160px] p-4 rounded-2xl bg-[#FBF9F5] dark:bg-[#131D12] border border-[#243324]/15 dark:border-white/15 flex flex-col justify-between">
               {outputText ? (
                 <div className="space-y-2">
-                  <div className="text-xs font-mono text-[#1F2B1D] dark:text-[#F4EFE6] break-all leading-relaxed select-all">
-                    {outputText}
+                  <div dir={selectedAlgoId === 'caesar' || selectedAlgoId === 'vigenere' || (selectedAlgoId === 'aes-256-gcm' && operationMode === 'decrypt') ? 'auto' : 'ltr'} className="text-xs font-mono text-[#1F2B1D] dark:text-[#F4EFE6] break-all leading-relaxed select-all">
+                    <bdi>{outputText}</bdi>
                   </div>
                 </div>
               ) : (
@@ -810,10 +810,9 @@ export const CryptoLabPage: React.FC = () => {
                   <div className="p-2.5 rounded-full bg-[#243324]/5 dark:bg-white/5">
                     <Terminal className="w-5 h-5 opacity-50" />
                   </div>
-                  <p className="text-xs font-mono">No cryptographic output yet.</p>
+                  <p className="text-xs font-mono">{t("No cryptographic output yet.")}</p>
                   <p className="text-[11px] font-light max-w-xs">
-                    Configure parameters and click the primary action button to execute.
-                  </p>
+                    {t("Configure parameters and click the primary action button to execute.")}</p>
                 </div>
               )}
 
@@ -827,7 +826,7 @@ export const CryptoLabPage: React.FC = () => {
                       className="px-3 py-1.5 rounded-xl text-xs font-mono bg-white dark:bg-[#202E1E] border border-[#243324]/15 dark:border-white/15 text-[#1F2B1D] dark:text-[#CBD7C7] hover:bg-[#F5F2EB] flex items-center gap-1.5 cursor-pointer shadow-2xs"
                     >
                       {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copied ? 'Copied' : 'Copy'}</span>
+                      <span>{t(copied ? 'Copied' : 'Copy')}</span>
                     </button>
                     <button
                       type="button"
@@ -835,7 +834,7 @@ export const CryptoLabPage: React.FC = () => {
                       className="px-3 py-1.5 rounded-xl text-xs font-mono bg-white dark:bg-[#202E1E] border border-[#243324]/15 dark:border-white/15 text-[#1F2B1D] dark:text-[#CBD7C7] hover:bg-[#F5F2EB] flex items-center gap-1.5 cursor-pointer shadow-2xs"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>Export</span>
+                      <span>{t("Export")}</span>
                     </button>
                   </div>
 
@@ -843,10 +842,9 @@ export const CryptoLabPage: React.FC = () => {
                     type="button"
                     onClick={handleSimulateTamper}
                     className="px-2.5 py-1.5 rounded-xl text-[11px] font-mono text-rose-700 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 cursor-pointer"
-                    title="Flip a character in the output to demonstrate fail-closed authentication rejection"
+                    title={t("Flip a character in the output to demonstrate fail-closed authentication rejection")}
                   >
-                    Simulate Tamper
-                  </button>
+                    {t("Simulate Tamper")}</button>
                 </div>
               )}
             </div>
@@ -861,7 +859,7 @@ export const CryptoLabPage: React.FC = () => {
                   className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-900 dark:text-rose-200 text-xs flex items-start gap-2.5"
                 >
                   <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
-                  <div className="font-mono whitespace-pre-wrap">{errorFeedback}</div>
+                  <div className="font-mono whitespace-pre-wrap">{localizeError(errorFeedback)}</div>
                 </motion.div>
               ) : isSuccess ? (
                 <motion.div
@@ -871,12 +869,12 @@ export const CryptoLabPage: React.FC = () => {
                   className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-200 text-xs flex items-start gap-2.5"
                 >
                   <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
-                  <div>{statusMessage}</div>
+                  <div>{t(statusMessage)}</div>
                 </motion.div>
               ) : (
                 <div className="p-3.5 rounded-2xl bg-[#F5F2EB] dark:bg-[#233522] border border-[#243324]/10 dark:border-white/10 text-xs text-[#4A5D44] dark:text-[#CBD7C7] flex items-center gap-2">
                   <Info className="w-4 h-4 shrink-0 text-[#657351] dark:text-[#A3B59E]" />
-                  <span>{statusMessage}</span>
+                  <span>{t(statusMessage)}</span>
                 </div>
               )}
             </AnimatePresence>
@@ -885,13 +883,12 @@ export const CryptoLabPage: React.FC = () => {
           {/* Algorithm Mathematical Specification Card */}
           <div className="p-5 sm:p-6 rounded-3xl bg-[#F5F2EB] dark:bg-[#172216] border border-[#243324]/10 dark:border-white/10 space-y-3">
             <h5 className="text-xs font-semibold uppercase tracking-wider text-[#657351] dark:text-[#A3B59E]">
-              Mathematical Specification
-            </h5>
+              {t("Mathematical Specification")}</h5>
             <div className="p-3 rounded-xl bg-white dark:bg-[#1E2E1D] border border-[#243324]/10 dark:border-white/10 font-mono text-xs text-[#1F2B1D] dark:text-[#F4EFE6] break-all">
-              {currentAlgo.formula}
+              <bdi dir="ltr">{currentAlgo.formula}</bdi>
             </div>
             <p className="text-xs text-[#4A5D44] dark:text-[#CBD7C7] font-light leading-relaxed">
-              {currentAlgo.description}
+              {t(currentAlgo.description)}
             </p>
           </div>
         </div>
@@ -899,3 +896,4 @@ export const CryptoLabPage: React.FC = () => {
     </div>
   );
 };
+

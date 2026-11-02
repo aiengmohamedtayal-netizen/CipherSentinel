@@ -1,3 +1,4 @@
+import { useLanguage } from '../context/LanguageContext';
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -18,7 +19,6 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import { useSessionActivity } from '../context/SessionContext';
 import { NavigationTab } from '../types';
-import { SecuritySettingsModal } from './SecuritySettingsModal';
 
 interface NavItem {
   id: NavigationTab;
@@ -37,11 +37,11 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export const Navbar: React.FC = () => {
+  const { t, language, toggleLanguage, formatNumber } = useLanguage();
   const { isDark, toggleTheme } = useTheme();
-  const { activeTab, setActiveTab, sessionOperationsCount, activeRsaKey } = useSessionActivity();
+  const { activeTab, setActiveTab, sessionOperationsCount } = useSessionActivity();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleSelectTab = (tab: NavigationTab) => {
     setActiveTab(tab);
@@ -57,7 +57,7 @@ export const Navbar: React.FC = () => {
           <button
             type="button"
             onClick={() => handleSelectTab('crypto-lab')}
-            className="flex items-center gap-3 cursor-pointer text-left group"
+            className="flex items-center gap-3 cursor-pointer text-start group"
           >
             <div className="p-2 rounded-2xl bg-[#1F2B1D] dark:bg-[#CBD7C7] text-white dark:text-[#1F2B1D] shadow-xs group-hover:scale-105 transition-transform">
               <Shield className="w-5 h-5" />
@@ -65,15 +65,12 @@ export const Navbar: React.FC = () => {
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
                 <span className="font-display text-lg sm:text-xl font-medium tracking-tight text-[#1F2B1D] dark:text-[#F4EFE6]">
-                  CipherSentinel
-                </span>
+                  {t("CipherSentinel")}</span>
                 <span className="hidden sm:inline-block px-2 py-0.5 rounded-md text-[10px] font-mono uppercase bg-[#1F2B1D]/10 dark:bg-white/10 text-[#1F2B1D] dark:text-[#CBD7C7]">
-                  Workbench
-                </span>
+                  {t("Workbench")}</span>
               </div>
               <span className="text-[11px] font-mono text-[#657351] dark:text-[#A3B59E] -mt-0.5 hidden sm:block">
-                AI-Assisted Message Security
-              </span>
+                {t("AI-Assisted Message Security")}</span>
             </div>
           </button>
 
@@ -94,7 +91,7 @@ export const Navbar: React.FC = () => {
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
-                  <span>{item.label}</span>
+                  <span>{t(item.label)}</span>
                 </button>
               );
             })}
@@ -117,7 +114,7 @@ export const Navbar: React.FC = () => {
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
-                  <span>{item.label.split(' ')[0]}</span>
+                  <span>{t(item.label).split(' ')[0]}</span>
                 </button>
               );
             })}
@@ -128,19 +125,29 @@ export const Navbar: React.FC = () => {
             {/* Live Session Ops Badge */}
             <div
               className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono bg-[#F5F2EB] dark:bg-[#1A2619] border border-[#243324]/10 dark:border-white/10 text-[#1F2B1D] dark:text-[#CBD7C7]"
-              title="Real cryptographic operations executed in active session"
+              title={t("Real cryptographic operations executed in active session")}
             >
               <Activity className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>{sessionOperationsCount} Ops</span>
+              <span dir="ltr"><bdi>{formatNumber(sessionOperationsCount)}</bdi> {t('Ops')}</span>
             </div>
+
+            <button
+              type="button"
+              onClick={toggleLanguage}
+              className="px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-full border border-[#243324]/15 dark:border-white/15 bg-white/80 dark:bg-[#233522] text-[#1F2B1D] dark:text-[#F4EFE6] text-xs font-semibold cursor-pointer shadow-xs"
+              aria-label={t('Switch display language')}
+              title={t('Switch display language')}
+            >
+              {language === 'en' ? 'العربية' : 'English'}
+            </button>
 
             {/* Sun / Moon Theme Toggle */}
             <button
               type="button"
               onClick={toggleTheme}
               className="p-2 sm:p-2.5 rounded-full border border-[#243324]/15 dark:border-white/15 bg-white/80 dark:bg-[#233522] text-[#1F2B1D] dark:text-[#F4EFE6] hover:bg-white dark:hover:bg-[#2c402a] transition-all cursor-pointer shadow-xs"
-              aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label={t(isDark ? 'Switch to light mode' : 'Switch to dark mode')}
+              title={t(isDark ? 'Switch to light mode' : 'Switch to dark mode')}
             >
               {isDark ? <Sun className="w-4 h-4 text-amber-300" /> : <Moon className="w-4 h-4" />}
             </button>
@@ -149,8 +156,8 @@ export const Navbar: React.FC = () => {
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 sm:p-2.5 rounded-full border border-[#243324]/15 dark:border-white/15 bg-white/80 dark:bg-[#233522] text-[#1F2B1D] dark:text-[#F4EFE6] cursor-pointer"
-              aria-label="Toggle Navigation Menu"
+              className="xl:hidden p-2 sm:p-2.5 rounded-full border border-[#243324]/15 dark:border-white/15 bg-white/80 dark:bg-[#233522] text-[#1F2B1D] dark:text-[#F4EFE6] cursor-pointer"
+              aria-label={t("Toggle Navigation Menu")}
             >
               {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             </button>
@@ -164,7 +171,7 @@ export const Navbar: React.FC = () => {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="lg:hidden border-t border-[#243324]/10 dark:border-white/10 bg-[#FBF9F5] dark:bg-[#131D12] px-4 py-4 space-y-1.5 shadow-lg"
+              className="xl:hidden border-t border-[#243324]/10 dark:border-white/10 bg-[#FBF9F5] dark:bg-[#131D12] px-4 py-4 space-y-1.5 shadow-lg"
             >
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
@@ -182,7 +189,7 @@ export const Navbar: React.FC = () => {
                   >
                     <div className="flex items-center gap-2.5">
                       <Icon className="w-4 h-4" />
-                      <span>{item.label}</span>
+                      <span>{t(item.label)}</span>
                     </div>
                     {isActive && <span className="w-2 h-2 rounded-full bg-emerald-500" />}
                   </button>
@@ -192,12 +199,7 @@ export const Navbar: React.FC = () => {
           )}
         </AnimatePresence>
       </header>
-
-      {/* Security Settings Modal */}
-      <SecuritySettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
     </>
   );
 };
+
